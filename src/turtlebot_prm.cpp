@@ -26,12 +26,12 @@ ros::Publisher marker_pub;
 
 void pose_callback(const geometry_msgs::PoseWithCovarianceStamped & msg)
 {
-	//This function is called when a new position message is received
-	double X = msg.pose.pose.position.x; // Robot X psotition
-	double Y = msg.pose.pose.position.y; // Robot Y psotition
- 	double Yaw = tf::getYaw(msg.pose.pose.orientation); // Robot Yaw
+  //This function is called when a new position message is received
+  double X = msg.pose.pose.position.x; // Robot X psotition
+  double Y = msg.pose.pose.position.y; // Robot Y psotition
+  double Yaw = tf::getYaw(msg.pose.pose.orientation); // Robot Yaw
 
-	std::cout << "X: " << X << ", Y: " << Y << ", Yaw: " << Yaw << std::endl ;
+  std::cout << "X: " << X << ", Y: " << Y << ", Yaw: " << Yaw << std::endl ;
 }
 
 //Example of drawing a curve
@@ -84,7 +84,7 @@ void map_callback(const nav_msgs::OccupancyGrid& msg)
 
 int main(int argc, char **argv)
 {
-	//Initialize the ROS framework
+  //Initialize the ROS framework
     ros::init(argc,argv,"main_control");
     ros::NodeHandle n;
 
@@ -101,23 +101,41 @@ int main(int argc, char **argv)
 
     //Set the loop rate
     ros::Rate loop_rate(20);    //20Hz update rate
-	
+
+    node nodes[4];
+    nodes[0].x = 0;
+    nodes[0].y = 0;
+    nodes[1].x = 1;
+    nodes[1].y = 0;
+    nodes[2].x = 0;
+    nodes[2].y = 1;
+    nodes[3].x = 1;
+    nodes[3].y = 1;
+    SET_EDGE(&nodes[0],&nodes[1]);
+    SET_EDGE(&nodes[0],&nodes[2]);
+    // SET_EDGE(&nodes[0],&nodes[3]);
+    SET_EDGE(&nodes[1],&nodes[2]);
+    SET_EDGE(&nodes[1],&nodes[3]);
+    SET_EDGE(&nodes[2],&nodes[3]);
+    path out_path;
+    bool found = a_star(&nodes[0], &nodes[3], out_path);
+    ROS_INFO("found: %d length: %f", found, out_path.cost);
 
     while (ros::ok())
     {
-    	loop_rate.sleep(); //Maintain the loop rate
-    	ros::spinOnce();   //Check for new messages
+      loop_rate.sleep(); //Maintain the loop rate
+      ros::spinOnce();   //Check for new messages
 
-	 //Draw Curves
+   //Draw Curves
          drawCurve(1);
          drawCurve(2);
          drawCurve(4);
     
-    	//Main loop code goes here:
-    	vel.linear.x = 0.1; // set linear speed
-    	vel.angular.z = 0.3; // set angular speed
+      //Main loop code goes here:
+      vel.linear.x = 0.1; // set linear speed
+      vel.angular.z = 0.3; // set angular speed
 
-    	velocity_publisher.publish(vel); // Publish the command velocity
+      velocity_publisher.publish(vel); // Publish the command velocity
     }
 
     return 0;
