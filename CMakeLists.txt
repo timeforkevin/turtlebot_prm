@@ -91,14 +91,14 @@ catkin_package(
 #  CATKIN_DEPENDS gazebo_msgs geometry_msgs nav_msgs roscpp rospy sensor_msgs std_msgs tf visualization_msgs
 #  DEPENDS system_lib
 )
-
+set(CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}")
 ###########
 ## Build ##
 ###########
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
-# include_directories(include)
+include_directories(include)
 include_directories(
   ${catkin_INCLUDE_DIRS}
 )
@@ -109,7 +109,7 @@ include_directories(
 # )
 
 ## Declare a cpp executable
-add_executable(turtlebot_prm src/turtlebot_prm.cpp)
+add_executable(turtlebot_prm src/turtlebot_prm.cpp src/a_star.cpp)
 add_executable(sim_pose_publisher_node src/sim_pose_publisher.cpp)
 add_executable(vis_pose_publisher_node src/vis_pose_publisher.cpp)
 

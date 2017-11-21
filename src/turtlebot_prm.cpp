@@ -16,6 +16,8 @@
 #include <nav_msgs/OccupancyGrid.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 
+#include "a_star.h"
+
 ros::Publisher marker_pub;
 
 #define TAGID 0
