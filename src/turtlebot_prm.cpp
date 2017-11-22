@@ -23,8 +23,8 @@
 
 #define TAGID 0
 #define K_STEER 1
-#define K_SOFT 0.05
-#define DIST_THRESH 0.05
+#define K_SOFT 1
+#define DIST_THRESH 0.25
 #define MAP_WIDTH 100
 #define NUM_POINTS 100
 #define FRAND_TO(X) (static_cast <double> (rand()) / (static_cast <double> (RAND_MAX/(X))))
@@ -215,7 +215,7 @@ int main(int argc, char **argv)
       ros::spinOnce();   //Check for new messages
       //Main loop code goes here:
 
-      float v_f = 0.1;
+      float v_f = 0.3;
 
       float ang = steering_angle(prev_node, *path_it, &pose, v_f);
       vel.linear.x = v_f; // set linear speed
