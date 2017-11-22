@@ -210,17 +210,16 @@ void publish_graph() {
 void publish_shortest_path(path& out_path) {
     for(int i = 1; i < out_path.nodes.size(); i++) {
 
-        id++; // Increase the ID
         visualization_msgs::Marker edge_msg;
-        edge_msg.id = id;
+        edge_msg.id = i+1000; // so that thats ids don't overlap
         edge_msg.header.frame_id = "map";
         edge_msg.header.stamp = ros::Time();
         edge_msg.ns = "localization";
         edge_msg.action = visualization_msgs::Marker::ADD;
         edge_msg.type = visualization_msgs::Marker::LINE_STRIP;
-        edge_msg.scale.x = 0.02;
-        edge_msg.scale.y = 0.02;
-        edge_msg.scale.z = 0.02;
+        edge_msg.scale.x = 0.1;
+        edge_msg.scale.y = 0.1;
+        edge_msg.scale.z = 0.1;
         edge_msg.color.a = 1.0;
         edge_msg.color.r = 1.0;
         edge_msg.color.g = 0.0;
@@ -254,7 +253,7 @@ void prm(node* waypoint1, node* waypoint2, const nav_msgs::OccupancyGrid& msg) {
     bool found = find_shortest_path(waypoint1, waypoint2, out_path, msg);
 
     if (found) {
-        publish_shortest_path();
+        publish_shortest_path(out_path);
     }
 }
 
