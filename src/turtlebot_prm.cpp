@@ -29,7 +29,7 @@
 #define MAP_WIDTH 100
 #define NUM_POINTS 100
 #define RESOLUTION 0.1
-#define RADIUS_THRESHOLD 10
+#define RADIUS_THRESHOLD 7
 #define FRAND_TO(X) (static_cast <double> (rand()) / (static_cast <double> (RAND_MAX/(X))))
 
 
@@ -41,6 +41,8 @@ ros::Publisher marker_pub;
 volatile bool first_pose = false;
 node pose;
 std::vector<node*> nodes_arr; // 3 for the waypoints
+
+short sgn(int x ) { return x >=0 ? 1 : -1; }
 
 void bresenham(int x0, int y0, int x1, int y1, std::vector<int>& x, std::vector<int>& y) {
 
@@ -107,44 +109,44 @@ void generate_edges() {
     }
 }
 
-// bool collision_detected(node* node_1, node* node_2, const nav_msgs::OccupancyGrid& msg) {
-//     std::vector<int> line_x;
-//     std::vector<int> line_y;
-//     bresenham(node_1->x, node_1->y, node_2->x, node_2->y, line_x, line_y);
-//     while (!line_x.empty()) {
-//         int next_x = line_x.back();
-//         int next_y = line_y.back();
-//         line_x.pop_back();
-//         line_y.pop_back();
+bool collision_detected(node* node_1, node* node_2, const nav_msgs::OccupancyGrid& msg) {
+    std::vector<int> line_x;
+    std::vector<int> line_y;
+    bresenham(node_1->x, node_1->y, node_2->x, node_2->y, line_x, line_y);
+    while (!line_x.empty()) {
+        int next_x = line_x.back();
+        int next_y = line_y.back();
+        line_x.pop_back();
+        line_y.pop_back();
 
-//         if(msg.data[round(rand_y/RESOLUTION)*MAP_WIDTH + round(rand_x/RESOLUTION)] == 100) {
-//             return true;
-//         }
-//     }
-//     return false;
-// }
+        if(msg.data[round(next_y/RESOLUTION)*MAP_WIDTH + round(next_x/RESOLUTION)] == 100) {
+            return true;
+        }
+    }
+    return false;
+}
 
-// bool find_shortest_path(node* waypoint1, node* waypoint2, path* out_path, const nav_msgs::OccupancyGrid& msg) {
-//     bool valid_path_found = false;
+bool find_shortest_path(node* waypoint1, node* waypoint2, path& out_path, const nav_msgs::OccupancyGrid& msg) {
+    bool valid_path_found = false;
 
-//     while (!valid_path_found) {
-//         path* current_path;
-//         bool found = a_star(waypoint1, waypoint2, current_path);
-//         if (!found) {
-//             break;
-//         } else {
-//             for(int i = 1; i < current_path->nodes.size(); i++) {
-//                 if(collision_detected(current_path->nodes.at(i-1), current_path->nodes(i), msg)) {
-//                     REMOVE_EDGE(current_path->nodes.at(i-1), current_path->nodes.at(i))
-//                     continue;
-//                 }
-//             }
-//             valid_path_found = true;
-//         }
-//     }
+    while (!valid_path_found) {
+        bool found = a_star(waypoint1, waypoint2, out_path);
+        if (!found) {
+            break;
+        } else {
+            for(int i = 1; i < out_path.nodes.size(); i++) {
+                if(collision_detected(out_path.nodes.at(i-1), out_path.nodes.at(i), msg)) {
+                    REMOVE_EDGE(out_path.nodes.at(i-1), out_path.nodes.at(i))
+                    continue;
+                }
+            }
+            valid_path_found = true;
 
-//     return valid_path_found;
-// }
+        }
+    }
+
+    return valid_path_found;
+}
 
 void publish_graph() {
     int id = 0;
@@ -210,8 +212,13 @@ void prm(node* waypoint1, node* waypoint2, const nav_msgs::OccupancyGrid& msg) {
 
     nodes_arr.push_back(waypoint1);
     nodes_arr.push_back(waypoint2);
+
     generate_nodes(msg);
     generate_edges();
+
+    path out_path;
+    find_shortest_path(waypoint1, waypoint2, out_path, msg);
+
     publish_graph();
 }
 
@@ -280,7 +287,7 @@ void map_callback(const nav_msgs::OccupancyGrid& msg)
     node* waypoint2 = new node();
     waypoint2->x = 7;
     waypoint2->y = 7;
-    waypoint2-> = 0;
+    waypoint2->yaw = 0;
 
     prm(waypoint1, waypoint2, msg);
 }
