@@ -44,7 +44,8 @@ node pose;
 
 node_t* nodes_arr[NUM_POINTS]; // 3 for the waypoints
 
-void generate_prm(const nav_msgs::OccupancyGrid& msg) {
+
+void generate_nodes(const nav_msgs::OccupancyGrid& msg) {
     // generate_points
     int count = 0;
     while (count < (NUM_POINTS-3)) {
@@ -58,7 +59,6 @@ void generate_prm(const nav_msgs::OccupancyGrid& msg) {
             node->yaw = 0;
             nodes_arr[count] = node;
             count += 1;
-            ROS_INFO("x:%f, y:%f", rand_x, rand_y);
         }
     }
 
@@ -83,18 +83,22 @@ void generate_prm(const nav_msgs::OccupancyGrid& msg) {
     waypoint3->yaw = -1.57;
 
     nodes_arr[99] = waypoint3;
+};
 
+void plot_nodes() {
     for (int i = 0; i < NUM_POINTS; i++) {
         geometry_msgs::Point p;
         p.x = nodes_arr[i]->x;
         p.y = nodes_arr[i]->y;
         points.points.push_back(p);
     }
-       marker_pub.publish(points);
+    
+    marker_pub.publish(points);
+}
 
-
-
-
+void generate_prm(const nav_msgs::OccupancyGrid& msg) {
+    generate_nodes(msg);
+    plot_nodes();
 }
 
 //Callback function for the Position topic (LIVE)
