@@ -32,11 +32,59 @@
 
 typedef Eigen::Matrix<float, 3, 1> Vector3f;
 
-node_t nodes_arr[NUM_POINTS + 3]; // 3 for the waypoints
 
 volatile bool first_pose = false;
 node pose;
 ros::Publisher marker_pub;
+
+node_t* nodes_arr[NUM_POINTS]; // 3 for the waypoints
+
+void generate_prm(const nav_msgs::OccupancyGrid& msg) {
+    // generate_points
+    int count = 0;
+    while (count < (NUM_POINTS-3)) {
+        float rand_x = FRAND_TO(MAP_WIDTH);
+        float rand_y = FRAND_TO(MAP_WIDTH);
+
+        if(msg.data[round(rand_x)*MAP_WIDTH + round(rand_y)] != 100) {
+            node_t *node = new node_t();
+            node->x = rand_x;
+            node->y = rand_y;
+            node->yaw = 0;
+            nodes_arr[count] = node;
+            count += 1;
+        }
+    }
+
+    // add waypoints
+    node_t* waypoint1 = new node_t();
+    waypoint1->x =  4;
+    waypoint1->y = 0;
+    waypoint1->yaw = 0;
+
+    nodes_arr[97] = waypoint1;
+
+    node_t* waypoint2 = new node_t();
+    waypoint2->x =  8;
+    waypoint2->y = 4;
+    waypoint2->yaw = 3.14;
+
+    nodes_arr[98] = waypoint2;
+
+    node_t* waypoint3 = new node_t();
+    waypoint3->x =  8;
+    waypoint3->y = 0;
+    waypoint3->yaw = -1.57;
+
+    nodes_arr[99] = waypoint3;
+
+
+    for(int i = 0; i < NUM_POINTS; i++) {
+      
+    }
+
+
+}
 
 //Callback function for the Position topic (LIVE)
 
@@ -88,6 +136,7 @@ void drawCurve(int k)
 
 }
 
+
 //Callback function for the map
 void map_callback(const nav_msgs::OccupancyGrid& msg)
 {
@@ -96,32 +145,6 @@ void map_callback(const nav_msgs::OccupancyGrid& msg)
     //you probably want to save the map into a form which is easy to work with
     generate_prm(msg);
 }
-
-
-
-void generate_prm(const nav_msgs::OccupancyGrid& msg) {
-    // generate_points
-    int count = 0;
-    while (count < 100) {
-        float rand_x = FRAND_TO(MAP_WIDTH);
-        float rand_y = FRAND_TO(MAP_WIDTH);
-
-        if(msg.data[round(rand_x)*MAP_WIDTH + round(rand_y)] != 100) {
-            node_t *node = new node_t();
-            node_t->x = rand_x;
-            node_t->y = rand_y;
-            node_t->yaw = 0;
-            nodes_arr[i] = node_t;
-            count += 1;
-        }
-    }
-
-    for (int i = 0; i < NUM_POINTS; i++) {
-        ROS_INFO("x: %f, y: %f", nodes_arr[i]->x, nodes_arr[y]->y);
-    }
-
-}
-
 
 float steering_angle(node *start, node *end, node *curr_pose, float &v_f) {
   float path_ang = atan2(end->y - start->y,
