@@ -29,6 +29,7 @@
 #define MAP_WIDTH 100
 #define NUM_POINTS 100
 #define RESOLUTION 0.1
+#define RADIUS_THRESHOLD 1
 #define FRAND_TO(X) (static_cast <double> (rand()) / (static_cast <double> (RAND_MAX/(X))))
 
 
@@ -36,7 +37,6 @@ typedef Eigen::Matrix<float, 3, 1> Vector3f;
 
 
 ros::Publisher marker_pub;
-visualization_msgs::Marker points;
 
 volatile bool first_pose = false;
 node pose;
@@ -85,20 +85,81 @@ void generate_nodes(const nav_msgs::OccupancyGrid& msg) {
     nodes_arr[99] = waypoint3;
 };
 
-void plot_nodes() {
-    for (int i = 0; i < NUM_POINTS; i++) {
-        geometry_msgs::Point p;
-        p.x = nodes_arr[i]->x;
-        p.y = nodes_arr[i]->y;
-        points.points.push_back(p);
+void generate_edges() {
+    for(int i = 0; i < NUM_POINTS; i++) {
+        for(int j = 0; j < NUM_POINTS; j++) {
+            if (i==j) continue;
+
+            if (DISTANCE_NODES(nodes_arr[i], nodes_arr[j]) < RADIUS_THRESHOLD) {
+                nodes_arr[i]->adj = nodes_arr[j];
+            }
+        }
     }
-    
-    marker_pub.publish(points);
+}
+
+void publish_graph() {
+    int id = 0;
+    visualization_msgs::Marker milestone_msg;
+    milestone_msg.id = id;
+    milestone_msg.header.frame_id = "map";
+    milestone_msg.header.stamp = ros::Time();
+    milestone_msg.ns = "localization";
+    milestone_msg.action = visualization_msgs::Marker::ADD;
+    milestone_msg.type = visualization_msgs::Marker::POINTS;
+    milestone_msg.scale.x = 0.2;
+    milestone_msg.scale.y = 0.2;
+    milestone_msg.scale.z = 0.2;
+    milestone_msg.color.a = 1.0;
+    milestone_msg.color.r = 0.0;
+    milestone_msg.color.g = 1.0;
+    milestone_msg.color.b = 0.0;
+
+      // Add the milestones as markers and publish their edges
+     for (int i = 0; i < NUM_POINTS; i++) {
+       geometry_msgs::Point p;
+       p.x = nodes_arr[i].x;
+       p.y = nodes_arr[i].y;
+       milestone_msg.points.push_back(p);
+
+       // Pubish the edges
+       for (node_t* node : nodes_arr[i]->adj)
+       {
+            id++; // Increase the ID
+            visualization_msgs::Marker edge_msg;
+            edge_msg.id = id;
+            edge_msg.header.frame_id = "map";
+            edge_msg.header.stamp = ros::Time();
+            edge_msg.ns = "localization";
+            edge_msg.action = visualization_msgs::Marker::ADD;
+            edge_msg.type = visualization_msgs::Marker::LINE_STRIP;
+            edge_msg.scale.x = 0.02;
+            edge_msg.scale.y = 0.02;
+            edge_msg.scale.z = 0.02;
+            edge_msg.color.a = 1.0;
+            edge_msg.color.r = 1.0;
+            edge_msg.color.g = 1.0;
+            edge_msg.color.b = 1.0;
+
+            geometry_msgs::Point m1;
+            m1.x = nodes_arr[i]->x;
+            m1.y = nodes_arr[i]->y;
+            edge_msg.points.push_back(m1);
+
+            geometry_msgs::Point m2;
+            m2.x = node->x;
+            m2.y = node->y;
+            edge_msg.points.push_back(m2);
+
+            marker_pub.publish(edge_msg);
+        }
+    }
+    marker_pub.publish(milestone_msg);
 }
 
 void generate_prm(const nav_msgs::OccupancyGrid& msg) {
     generate_nodes(msg);
-    plot_nodes();
+    generate_edges();
+    publish_graph();
 }
 
 //Callback function for the Position topic (LIVE)
