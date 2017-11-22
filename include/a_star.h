@@ -1,21 +1,22 @@
 #ifndef A_STAR_H
 #define A_STAR_H
 
-#include <vector>
+#include <set>
 
-#define SET_EDGE(M,N) (M)->adj.push_back(N); (N)->adj.push_back(M);
+#define SET_EDGE(M,N) (M)->adj.insert(N); (N)->adj.insert(M);
 
 #define DISTANCE(X,Y) (sqrt((X->x - Y->x)*(X->x - Y->x) \
                           + (X->y - Y->y)*(X->y - Y->y)))
 
 typedef struct node_t {
-  int x;
-  int y;
-  std::vector<node_t*> adj;
+  float x;
+  float y;
+  float yaw;
+  std::set<node_t*> adj;
 } node;
 
 typedef struct {
-  std::vector<node*> nodes;
+  std::set<node*> nodes;
   float cost; // estimate
 } path;
 

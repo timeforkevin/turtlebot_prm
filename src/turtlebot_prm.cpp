@@ -3,7 +3,7 @@
 // turtlebot_example.cpp
 // This file contains example code for use with ME 597 lab 3
 //
-// Author: James Servos 
+// Author: James Servos
 //
 // //////////////////////////////////////////////////////////
 
@@ -15,12 +15,20 @@
 #include <visualization_msgs/Marker.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
+#include <eigen3/Eigen/Dense>
+#include <random>
 
 #include "a_star.h"
 
+
 ros::Publisher marker_pub;
 
+node_t nodes_arr[NUM_POINTS + 3] // 3 for the waypoints
+
 #define TAGID 0
+#define FRAND_TO(X) (static_cast <double> (rand()) / (static_cast <double> (RAND_MAX/(X))))
+#define MAP_WIDTH 100
+#define NUM_POINTS 100
 
 //Callback function for the Position topic (LIVE)
 
@@ -35,7 +43,7 @@ void pose_callback(const geometry_msgs::PoseWithCovarianceStamped & msg)
 }
 
 //Example of drawing a curve
-void drawCurve(int k) 
+void drawCurve(int k)
 {
    // Curves are drawn as a series of stright lines
    // Simply sample your curves into a series of points
@@ -61,11 +69,11 @@ void drawCurve(int k)
        p.x = x;
        p.y = y;
        p.z = 0; //not used
-       lines.points.push_back(p); 
+       lines.points.push_back(p);
 
        //curve model
        x = x+0.1;
-       y = sin(0.1*i*k);   
+       y = sin(0.1*i*k);
    }
 
    //publish new curve
@@ -77,8 +85,34 @@ void drawCurve(int k)
 void map_callback(const nav_msgs::OccupancyGrid& msg)
 {
     //This function is called when a new map is received
-    
+
     //you probably want to save the map into a form which is easy to work with
+    generate_prm(msg);
+}
+
+
+
+void generate_prm(const nav_msgs::OccupancyGrid& msg) {
+    // generate_points
+    int count = 0;
+    while (count < 100) {
+        float rand_x = FRAND_TO(MAP_WIDTH);
+        float rand_y = FRAND_TO(MAP_WIDTH);
+
+        if(msg.data[round(rand_x)*MAP_WIDTH + round(rand_y)] != 100) {
+            node_t *node = new node_t();
+            node_t->x = rand_x;
+            node_t->y = rand_y;
+            node_t->yaw = 0;
+            nodes_arr[i] = node_t;
+            count += 1;
+        }
+    }
+
+    for (int i = 0; i < NUM_POINTS; i++) {
+        ROS_INFO("x: %f, y: %f", nodes_arr[i]->x, nodes_arr[y]->y);
+    }
+
 }
 
 
@@ -95,7 +129,7 @@ int main(int argc, char **argv)
     //Setup topics to Publish from this node
     ros::Publisher velocity_publisher = n.advertise<geometry_msgs::Twist>("/cmd_vel_mux/input/navi", 1);
     marker_pub = n.advertise<visualization_msgs::Marker>("visualization_marker", 1, true);
-    
+
     //Velocity control variable
     geometry_msgs::Twist vel;
 
@@ -130,7 +164,7 @@ int main(int argc, char **argv)
          drawCurve(1);
          drawCurve(2);
          drawCurve(4);
-    
+
       //Main loop code goes here:
       vel.linear.x = 0.1; // set linear speed
       vel.angular.z = 0.3; // set angular speed
