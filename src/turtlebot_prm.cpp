@@ -40,62 +40,111 @@ ros::Publisher marker_pub;
 
 volatile bool first_pose = false;
 node pose;
+std::vector<node*> nodes_arr; // 3 for the waypoints
 
+void bresenham(int x0, int y0, int x1, int y1, std::vector<int>& x, std::vector<int>& y) {
 
-node_t* nodes_arr[NUM_POINTS]; // 3 for the waypoints
+    int dx = abs(x1 - x0);
+    int dy = abs(y1 - y0);
+    int dx2 = x1 - x0;
+    int dy2 = y1 - y0;
 
+    const bool s = abs(dy) > abs(dx);
+
+    if (s) {
+        int dx2 = dx;
+        dx = dy;
+        dy = dx2;
+    }
+
+    int inc1 = 2 * dy;
+    int d = inc1 - dx;
+    int inc2 = d - dx;
+
+    x.push_back(x0);
+    y.push_back(y0);
+
+    while (x0 != x1 || y0 != y1) {
+        if (s) y0+=sgn(dy2); else x0+=sgn(dx2);
+        if (d < 0) d += inc1;
+        else {
+          d += inc2;
+          if (s) x0+=sgn(dx2); else y0+=sgn(dy2);
+        }
+
+        //Add point to vector
+        x.push_back(x0);
+        y.push_back(y0);
+    }
+}
 
 void generate_nodes(const nav_msgs::OccupancyGrid& msg) {
-    // generate_points
     int count = 0;
-    while (count < (NUM_POINTS-3)) {
+    while (count < NUM_POINTS) {
         float rand_x = FRAND_TO(MAP_WIDTH*RESOLUTION);
         float rand_y = FRAND_TO(MAP_WIDTH*RESOLUTION);
 
         if(msg.data[round(rand_y/RESOLUTION)*MAP_WIDTH + round(rand_x/RESOLUTION)] != 100) {
-            node_t *node = new node_t();
-            node->x = rand_x;
-            node->y = rand_y;
-            node->yaw = 0;
-            nodes_arr[count] = node;
+            node *new_node = new node();
+            new_node->x = rand_x;
+            new_node->y = rand_y;
+            new_node->yaw = 0;
+            nodes_arr.push_back(new_node);
             count += 1;
         }
     }
-
-    // add waypoints
-    node_t* waypoint1 = new node_t();
-    waypoint1->x =  4;
-    waypoint1->y = 0;
-    waypoint1->yaw = 0;
-
-    nodes_arr[97] = waypoint1;
-
-    node_t* waypoint2 = new node_t();
-    waypoint2->x =  8;
-    waypoint2->y = 4;
-    waypoint2->yaw = 3.14;
-
-    nodes_arr[98] = waypoint2;
-
-    node_t* waypoint3 = new node_t();
-    waypoint3->x =  8;
-    waypoint3->y = 0;
-    waypoint3->yaw = -1.57;
-
-    nodes_arr[99] = waypoint3;
-};
+}
 
 void generate_edges() {
     for(int i = 0; i < NUM_POINTS; i++) {
         for(int j = 0; j < NUM_POINTS; j++) {
             if (i==j) continue;
 
-            if (DISTANCE_NODES(nodes_arr[i], nodes_arr[j]) < RADIUS_THRESHOLD) {
-                SET_EDGE(nodes_arr[i], nodes_arr[j]);
+            if (DISTANCE_NODES(nodes_arr.at(i), nodes_arr.at(j)) < RADIUS_THRESHOLD) {
+                SET_EDGE(nodes_arr.at(i), nodes_arr.at(j));
             }
         }
     }
 }
+
+// bool collision_detected(node* node_1, node* node_2, const nav_msgs::OccupancyGrid& msg) {
+//     std::vector<int> line_x;
+//     std::vector<int> line_y;
+//     bresenham(node_1->x, node_1->y, node_2->x, node_2->y, line_x, line_y);
+//     while (!line_x.empty()) {
+//         int next_x = line_x.back();
+//         int next_y = line_y.back();
+//         line_x.pop_back();
+//         line_y.pop_back();
+
+//         if(msg.data[round(rand_y/RESOLUTION)*MAP_WIDTH + round(rand_x/RESOLUTION)] == 100) {
+//             return true;
+//         }
+//     }
+//     return false;
+// }
+
+// bool find_shortest_path(node* waypoint1, node* waypoint2, path* out_path, const nav_msgs::OccupancyGrid& msg) {
+//     bool valid_path_found = false;
+
+//     while (!valid_path_found) {
+//         path* current_path;
+//         bool found = a_star(waypoint1, waypoint2, current_path);
+//         if (!found) {
+//             break;
+//         } else {
+//             for(int i = 1; i < current_path->nodes.size(); i++) {
+//                 if(collision_detected(current_path->nodes.at(i-1), current_path->nodes(i), msg)) {
+//                     REMOVE_EDGE(current_path->nodes.at(i-1), current_path->nodes.at(i))
+//                     continue;
+//                 }
+//             }
+//             valid_path_found = true;
+//         }
+//     }
+
+//     return valid_path_found;
+// }
 
 void publish_graph() {
     int id = 0;
@@ -115,14 +164,14 @@ void publish_graph() {
     milestone_msg.color.b = 0.0;
 
       // Add the milestones as markers and publish their edges
-     for (int i = 0; i < NUM_POINTS; i++) {
+     for (node* curr_node : nodes_arr) {
        geometry_msgs::Point p;
-       p.x = nodes_arr[i]->x;
-       p.y = nodes_arr[i]->y;
+       p.x = curr_node->x;
+       p.y = curr_node->y;
        milestone_msg.points.push_back(p);
 
        //Pubish the edges
-       for (node_t* node : nodes_arr[i]->adj)
+       for (node* node : curr_node->adj)
        {
             id++; // Increase the ID
             visualization_msgs::Marker edge_msg;
@@ -141,8 +190,8 @@ void publish_graph() {
             edge_msg.color.b = 1.0;
 
             geometry_msgs::Point m1;
-            m1.x = nodes_arr[i]->x;
-            m1.y = nodes_arr[i]->y;
+            m1.x = curr_node->x;
+            m1.y = curr_node->y;
             edge_msg.points.push_back(m1);
 
             geometry_msgs::Point m2;
@@ -156,7 +205,11 @@ void publish_graph() {
     marker_pub.publish(milestone_msg);
 }
 
-void generate_prm(const nav_msgs::OccupancyGrid& msg) {
+void prm(node* waypoint1, node* waypoint2, const nav_msgs::OccupancyGrid& msg) {
+
+
+    nodes_arr.push_back(waypoint1);
+    nodes_arr.push_back(waypoint2);
     generate_nodes(msg);
     generate_edges();
     publish_graph();
@@ -219,7 +272,17 @@ void map_callback(const nav_msgs::OccupancyGrid& msg)
     //This function is called when a new map is received
 
     //you probably want to save the map into a form which is easy to work with
-    generate_prm(msg);
+    node* waypoint1 = new node();
+    waypoint1->x = 1;
+    waypoint1->y = 1;
+    waypoint1->yaw = 0;
+
+    node* waypoint2 = new node();
+    waypoint2->x = 7;
+    waypoint2->y = 7;
+    waypoint2-> = 0;
+
+    prm(waypoint1, waypoint2, msg);
 }
 
 float steering_angle(node *start, node *end, node *curr_pose, float &v_f) {
