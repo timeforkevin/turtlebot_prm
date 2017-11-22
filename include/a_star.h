@@ -16,7 +16,7 @@ typedef struct node_t {
 } node;
 
 typedef struct {
-  std::set<node*> nodes;
+  std::vector<node*> nodes;
   float cost; // estimate
 } path;
 

@@ -15,7 +15,6 @@
 #include <visualization_msgs/Marker.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
-#include <eigen3/Eigen/Dense>
 #include <random>
 
 #include "a_star.h"
@@ -23,12 +22,60 @@
 
 ros::Publisher marker_pub;
 
-node_t nodes_arr[NUM_POINTS + 3] // 3 for the waypoints
 
 #define TAGID 0
 #define FRAND_TO(X) (static_cast <double> (rand()) / (static_cast <double> (RAND_MAX/(X))))
 #define MAP_WIDTH 100
 #define NUM_POINTS 100
+
+node_t* nodes_arr[NUM_POINTS]; // 3 for the waypoints
+
+void generate_prm(const nav_msgs::OccupancyGrid& msg) {
+    // generate_points
+    int count = 0;
+    while (count < (NUM_POINTS-3)) {
+        float rand_x = FRAND_TO(MAP_WIDTH);
+        float rand_y = FRAND_TO(MAP_WIDTH);
+
+        if(msg.data[round(rand_x)*MAP_WIDTH + round(rand_y)] != 100) {
+            node_t *node = new node_t();
+            node->x = rand_x;
+            node->y = rand_y;
+            node->yaw = 0;
+            nodes_arr[count] = node;
+            count += 1;
+        }
+    }
+
+    // add waypoints
+    node_t* waypoint1 = new node_t();
+    waypoint1->x =  4;
+    waypoint1->y = 0;
+    waypoint1->yaw = 0;
+
+    nodes_arr[97] = waypoint1;
+
+    node_t* waypoint2 = new node_t();
+    waypoint2->x =  8;
+    waypoint2->y = 4;
+    waypoint2->yaw = 3.14;
+
+    nodes_arr[98] = waypoint2;
+
+    node_t* waypoint3 = new node_t();
+    waypoint3->x =  8;
+    waypoint3->y = 0;
+    waypoint3->yaw = -1.57;
+
+    nodes_arr[99] = waypoint3;
+
+
+    for(int i = 0; i < NUM_POINTS; i++) {
+      
+    }
+
+
+}
 
 //Callback function for the Position topic (LIVE)
 
@@ -81,6 +128,7 @@ void drawCurve(int k)
 
 }
 
+
 //Callback function for the map
 void map_callback(const nav_msgs::OccupancyGrid& msg)
 {
@@ -90,30 +138,6 @@ void map_callback(const nav_msgs::OccupancyGrid& msg)
     generate_prm(msg);
 }
 
-
-
-void generate_prm(const nav_msgs::OccupancyGrid& msg) {
-    // generate_points
-    int count = 0;
-    while (count < 100) {
-        float rand_x = FRAND_TO(MAP_WIDTH);
-        float rand_y = FRAND_TO(MAP_WIDTH);
-
-        if(msg.data[round(rand_x)*MAP_WIDTH + round(rand_y)] != 100) {
-            node_t *node = new node_t();
-            node_t->x = rand_x;
-            node_t->y = rand_y;
-            node_t->yaw = 0;
-            nodes_arr[i] = node_t;
-            count += 1;
-        }
-    }
-
-    for (int i = 0; i < NUM_POINTS; i++) {
-        ROS_INFO("x: %f, y: %f", nodes_arr[i]->x, nodes_arr[y]->y);
-    }
-
-}
 
 
 int main(int argc, char **argv)
@@ -136,24 +160,6 @@ int main(int argc, char **argv)
     //Set the loop rate
     ros::Rate loop_rate(20);    //20Hz update rate
 
-    node nodes[4];
-    nodes[0].x = 0;
-    nodes[0].y = 0;
-    nodes[1].x = 1;
-    nodes[1].y = 0;
-    nodes[2].x = 0;
-    nodes[2].y = 1;
-    nodes[3].x = 1;
-    nodes[3].y = 1;
-    SET_EDGE(&nodes[0],&nodes[1]);
-    SET_EDGE(&nodes[0],&nodes[2]);
-    // SET_EDGE(&nodes[0],&nodes[3]);
-    SET_EDGE(&nodes[1],&nodes[2]);
-    SET_EDGE(&nodes[1],&nodes[3]);
-    SET_EDGE(&nodes[2],&nodes[3]);
-    path out_path;
-    bool found = a_star(&nodes[0], &nodes[3], out_path);
-    ROS_INFO("found: %d length: %f", found, out_path.cost);
 
     while (ros::ok())
     {
