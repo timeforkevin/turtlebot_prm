@@ -227,13 +227,13 @@ void publish_shortest_path(path& out_path) {
         edge_msg.color.b = 0.0;
 
         geometry_msgs::Point m1;
-        m1.x = outpath.nodes.at(i-1)->x;
-        m1.y = outpath.nodes.at(i-1)->y;
+        m1.x = out_path.nodes.at(i-1)->x;
+        m1.y = out_path.nodes.at(i-1)->y;
         edge_msg.points.push_back(m1);
 
         geometry_msgs::Point m2;
-        m2.x = outpath.nodes.at(i)->x;
-        m2.y = outpath.nodes.at(i-1)->y;
+        m2.x = out_path.nodes.at(i)->x;
+        m2.y = out_path.nodes.at(i-1)->y;
         edge_msg.points.push_back(m2);
 
         marker_pub.publish(edge_msg);
