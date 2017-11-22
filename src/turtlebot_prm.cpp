@@ -29,7 +29,7 @@
 #define MAP_WIDTH 100
 #define NUM_POINTS 100
 #define RESOLUTION 0.1
-#define RADIUS_THRESHOLD 7
+#define RADIUS_THRESHOLD 5
 #define FRAND_TO(X) (static_cast <double> (rand()) / (static_cast <double> (RAND_MAX/(X))))
 
 
@@ -112,14 +112,16 @@ void generate_edges() {
 bool collision_detected(node* node_1, node* node_2, const nav_msgs::OccupancyGrid& msg) {
     std::vector<int> line_x;
     std::vector<int> line_y;
-    bresenham(node_1->x, node_1->y, node_2->x, node_2->y, line_x, line_y);
+    bresenham(round(node_1->x/RESOLUTION), round(node_1->y/RESOLUTION),
+              round(node_2->x/RESOLUTION), round(node_2->y/RESOLUTION), line_x, line_y);
     while (!line_x.empty()) {
         int next_x = line_x.back();
         int next_y = line_y.back();
         line_x.pop_back();
         line_y.pop_back();
-
-        if(msg.data[round(next_y/RESOLUTION)*MAP_WIDTH + round(next_x/RESOLUTION)] == 100) {
+        // ROS_INFO("Check X:%d Y:%d", next_x, next_y);
+        if(msg.data[next_y*MAP_WIDTH + next_x] == 100) {
+            // ROS_INFO("COLLISION AT X:%d Y:%d", next_x, next_y);
             return true;
         }
     }
@@ -130,28 +132,34 @@ bool find_shortest_path(node* waypoint1, node* waypoint2, path& out_path, const 
     bool valid_path_found = false;
 
     while (!valid_path_found) {
-        bool found = a_star(waypoint1, waypoint2, out_path);
-        if (!found) {
+        if (!a_star(waypoint1, waypoint2, out_path)) {
+            ROS_INFO("A_STAR FAILED");
             break;
         } else {
+            bool collision = false;
             for(int i = 1; i < out_path.nodes.size(); i++) {
                 if(collision_detected(out_path.nodes.at(i-1), out_path.nodes.at(i), msg)) {
+                    collision = true;
                     REMOVE_EDGE(out_path.nodes.at(i-1), out_path.nodes.at(i))
-                    continue;
+                    break;
                 }
             }
-            valid_path_found = true;
+            if (collision) {
+                // ROS_INFO("COLLSION");
+                continue;
+            } else {
+                valid_path_found = true;
+            }
 
         }
     }
-
+    ROS_INFO("VALID PATH: %d", valid_path_found);
     return valid_path_found;
 }
 
 void publish_graph() {
-    int id = 0;
     visualization_msgs::Marker milestone_msg;
-    milestone_msg.id = id;
+    milestone_msg.id = 1;
     milestone_msg.header.frame_id = "map";
     milestone_msg.header.stamp = ros::Time();
     milestone_msg.ns = "localization";
@@ -164,32 +172,33 @@ void publish_graph() {
     milestone_msg.color.r = 0.0;
     milestone_msg.color.g = 1.0;
     milestone_msg.color.b = 0.0;
+    milestone_msg.lifetime = ros::Duration(0);
+    //Pubish the edges
+    visualization_msgs::Marker edge_msg;
+    edge_msg.id = 2;
+    edge_msg.header.frame_id = "map";
+    edge_msg.header.stamp = ros::Time();
+    edge_msg.ns = "localization";
+    edge_msg.action = visualization_msgs::Marker::ADD;
+    edge_msg.type = visualization_msgs::Marker::LINE_LIST;
+    edge_msg.scale.x = 0.02;
+    edge_msg.scale.y = 0.02;
+    edge_msg.scale.z = 0.02;
+    edge_msg.color.a = 1.0;
+    edge_msg.color.r = 0.0;
+    edge_msg.color.g = 0.0;
+    edge_msg.color.b = 1.0;
+    edge_msg.lifetime = ros::Duration(0);
 
       // Add the milestones as markers and publish their edges
      for (node* curr_node : nodes_arr) {
-       geometry_msgs::Point p;
-       p.x = curr_node->x;
-       p.y = curr_node->y;
-       milestone_msg.points.push_back(p);
+        geometry_msgs::Point p;
+        p.x = curr_node->x;
+        p.y = curr_node->y;
+        milestone_msg.points.push_back(p);
 
-       //Pubish the edges
-       for (node* node : curr_node->adj)
-       {
-            id++; // Increase the ID
-            visualization_msgs::Marker edge_msg;
-            edge_msg.id = id;
-            edge_msg.header.frame_id = "map";
-            edge_msg.header.stamp = ros::Time();
-            edge_msg.ns = "localization";
-            edge_msg.action = visualization_msgs::Marker::ADD;
-            edge_msg.type = visualization_msgs::Marker::LINE_STRIP;
-            edge_msg.scale.x = 0.02;
-            edge_msg.scale.y = 0.02;
-            edge_msg.scale.z = 0.02;
-            edge_msg.color.a = 1.0;
-            edge_msg.color.r = 0.0;
-            edge_msg.color.g = 0.0;
-            edge_msg.color.b = 1.0;
+        for (node* node : curr_node->adj)
+        {
 
             geometry_msgs::Point m1;
             m1.x = curr_node->x;
@@ -201,29 +210,30 @@ void publish_graph() {
             m2.y = node->y;
             edge_msg.points.push_back(m2);
 
-            marker_pub.publish(edge_msg);
         }
     }
     marker_pub.publish(milestone_msg);
+    marker_pub.publish(edge_msg);
 }
 
 void publish_shortest_path(path& out_path) {
-    for(int i = 1; i < out_path.nodes.size(); i++) {
 
-        visualization_msgs::Marker edge_msg;
-        edge_msg.id = i+1000; // so that thats ids don't overlap
-        edge_msg.header.frame_id = "map";
-        edge_msg.header.stamp = ros::Time();
-        edge_msg.ns = "localization";
-        edge_msg.action = visualization_msgs::Marker::ADD;
-        edge_msg.type = visualization_msgs::Marker::LINE_STRIP;
-        edge_msg.scale.x = 0.1;
-        edge_msg.scale.y = 0.1;
-        edge_msg.scale.z = 0.1;
-        edge_msg.color.a = 1.0;
-        edge_msg.color.r = 1.0;
-        edge_msg.color.g = 0.0;
-        edge_msg.color.b = 0.0;
+    visualization_msgs::Marker edge_msg;
+    edge_msg.id = 3; // so that thats ids don't overlap
+    edge_msg.header.frame_id = "map";
+    edge_msg.header.stamp = ros::Time();
+    edge_msg.ns = "localization";
+    edge_msg.action = visualization_msgs::Marker::ADD;
+    edge_msg.type = visualization_msgs::Marker::LINE_LIST;
+    edge_msg.scale.x = 0.1;
+    edge_msg.scale.y = 0.1;
+    edge_msg.scale.z = 0.1;
+    edge_msg.color.a = 1.0;
+    edge_msg.color.r = 1.0;
+    edge_msg.color.g = 0.0;
+    edge_msg.color.b = 0.0;
+    edge_msg.lifetime = ros::Duration(0);
+    for(int i = 1; i < out_path.nodes.size(); i++) {
 
         geometry_msgs::Point m1;
         m1.x = out_path.nodes.at(i-1)->x;
@@ -232,29 +242,34 @@ void publish_shortest_path(path& out_path) {
 
         geometry_msgs::Point m2;
         m2.x = out_path.nodes.at(i)->x;
-        m2.y = out_path.nodes.at(i-1)->y;
+        m2.y = out_path.nodes.at(i)->y;
         edge_msg.points.push_back(m2);
 
-        marker_pub.publish(edge_msg);
     }
+    marker_pub.publish(edge_msg);
 }
 
 void prm(node* waypoint1, node* waypoint2, const nav_msgs::OccupancyGrid& msg) {
 
-
-    nodes_arr.push_back(waypoint1);
-    nodes_arr.push_back(waypoint2);
-
-    generate_nodes(msg);
-    generate_edges();
-    publish_graph();
-
     path out_path;
-    bool found = find_shortest_path(waypoint1, waypoint2, out_path, msg);
+    do {
+      out_path.nodes.clear();
+      nodes_arr.clear();
+      nodes_arr.push_back(waypoint1);
+      nodes_arr.push_back(waypoint2);
 
-    if (found) {
-        publish_shortest_path(out_path);
+      generate_nodes(msg);
+      generate_edges();
+      // find_shortest_path(waypoint1, waypoint2, out_path, msg);
+      publish_graph();
+    } while (!find_shortest_path(waypoint1, waypoint2, out_path, msg));    
+
+    for (node* n : out_path.nodes) {
+      ROS_INFO("X: %f Y:%f", n->x, n->y);
     }
+    // if (found) {
+        publish_shortest_path(out_path);
+    // }
 }
 
 //Callback function for the Position topic (LIVE)
@@ -320,8 +335,8 @@ void map_callback(const nav_msgs::OccupancyGrid& msg)
     waypoint1->yaw = 0;
 
     node* waypoint2 = new node();
-    waypoint2->x = 7;
-    waypoint2->y = 7;
+    waypoint2->x = 4;
+    waypoint2->y = 8;
     waypoint2->yaw = 0;
 
     prm(waypoint1, waypoint2, msg);

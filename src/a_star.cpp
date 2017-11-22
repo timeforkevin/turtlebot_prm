@@ -34,7 +34,7 @@ bool a_star(node *start, node *end, path &out_path) {
     if (cur_path->nodes.back() == end) {
       // best current path is path to end
       // finished!
-ROS_INFO("PATH FOUND");
+// ROS_INFO("PATH FOUND");
       path_found = true;
       out_path.nodes = cur_path->nodes;
       out_path.cost = cur_cost;
