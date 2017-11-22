@@ -92,6 +92,9 @@ void generate_prm(const nav_msgs::OccupancyGrid& msg) {
     }
        marker_pub.publish(points);
 
+
+
+
 }
 
 //Callback function for the Position topic (LIVE)
@@ -236,7 +239,7 @@ int main(int argc, char **argv)
       ros::spinOnce();   //Check for new messages
       //Main loop code goes here:
 
-      float v_f = 0.3;
+      float v_f = 0.1;
 
       float ang = steering_angle(prev_node, *path_it, &pose, v_f);
       vel.linear.x = v_f; // set linear speed
