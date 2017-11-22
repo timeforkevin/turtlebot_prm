@@ -29,7 +29,7 @@
 #define MAP_WIDTH 100
 #define NUM_POINTS 100
 #define RESOLUTION 0.1
-#define RADIUS_THRESHOLD 1
+#define RADIUS_THRESHOLD 10
 #define FRAND_TO(X) (static_cast <double> (rand()) / (static_cast <double> (RAND_MAX/(X))))
 
 
@@ -91,7 +91,7 @@ void generate_edges() {
             if (i==j) continue;
 
             if (DISTANCE_NODES(nodes_arr[i], nodes_arr[j]) < RADIUS_THRESHOLD) {
-                nodes_arr[i]->adj = nodes_arr[j];
+                SET_EDGE(nodes_arr[i], nodes_arr[j]);
             }
         }
     }
@@ -117,11 +117,11 @@ void publish_graph() {
       // Add the milestones as markers and publish their edges
      for (int i = 0; i < NUM_POINTS; i++) {
        geometry_msgs::Point p;
-       p.x = nodes_arr[i].x;
-       p.y = nodes_arr[i].y;
+       p.x = nodes_arr[i]->x;
+       p.y = nodes_arr[i]->y;
        milestone_msg.points.push_back(p);
 
-       // Pubish the edges
+       //Pubish the edges
        for (node_t* node : nodes_arr[i]->adj)
        {
             id++; // Increase the ID
@@ -136,8 +136,8 @@ void publish_graph() {
             edge_msg.scale.y = 0.02;
             edge_msg.scale.z = 0.02;
             edge_msg.color.a = 1.0;
-            edge_msg.color.r = 1.0;
-            edge_msg.color.g = 1.0;
+            edge_msg.color.r = 0.0;
+            edge_msg.color.g = 0.0;
             edge_msg.color.b = 1.0;
 
             geometry_msgs::Point m1;
@@ -250,19 +250,6 @@ int main(int argc, char **argv)
 
     //Velocity control variable
     geometry_msgs::Twist vel;
-
-    points.header.frame_id = "map";
-    points.id = 0;
-    points.ns = "particles";
-    points.type = visualization_msgs::Marker::POINTS;
-    points.action = 0;
-    points.color.g = 1;
-    points.color.a = 1;
-    points.lifetime = ros::Duration(0);
-    points.frame_locked = true;
-    points.pose.orientation.w = 1.0;
-    points.scale.x = 0.05;
-    points.scale.y = 0.05;
 
     //Set the loop rate
     ros::Rate loop_rate(20);    //20Hz update rate
