@@ -17,6 +17,7 @@
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <eigen3/Eigen/Dense>
 #include <random>
+#include <visualization_msgs/Marker.h>
 
 #include "a_star.h"
 
@@ -27,15 +28,19 @@
 #define DIST_THRESH 0.05
 #define MAP_WIDTH 100
 #define NUM_POINTS 100
+#define RESOLUTION 0.1
 #define FRAND_TO(X) (static_cast <double> (rand()) / (static_cast <double> (RAND_MAX/(X))))
 
 
 typedef Eigen::Matrix<float, 3, 1> Vector3f;
 
 
+ros::Publisher marker_pub;
+visualization_msgs::Marker points;
+
 volatile bool first_pose = false;
 node pose;
-ros::Publisher marker_pub;
+
 
 node_t* nodes_arr[NUM_POINTS]; // 3 for the waypoints
 
@@ -43,16 +48,17 @@ void generate_prm(const nav_msgs::OccupancyGrid& msg) {
     // generate_points
     int count = 0;
     while (count < (NUM_POINTS-3)) {
-        float rand_x = FRAND_TO(MAP_WIDTH);
-        float rand_y = FRAND_TO(MAP_WIDTH);
+        float rand_x = FRAND_TO(MAP_WIDTH*RESOLUTION);
+        float rand_y = FRAND_TO(MAP_WIDTH*RESOLUTION);
 
-        if(msg.data[round(rand_x)*MAP_WIDTH + round(rand_y)] != 100) {
+        if(msg.data[round(rand_y/RESOLUTION)*MAP_WIDTH + round(rand_x/RESOLUTION)] != 100) {
             node_t *node = new node_t();
             node->x = rand_x;
             node->y = rand_y;
             node->yaw = 0;
             nodes_arr[count] = node;
             count += 1;
+            ROS_INFO("x:%f, y:%f", rand_x, rand_y);
         }
     }
 
@@ -78,11 +84,13 @@ void generate_prm(const nav_msgs::OccupancyGrid& msg) {
 
     nodes_arr[99] = waypoint3;
 
-
-    for(int i = 0; i < NUM_POINTS; i++) {
-      
+    for (int i = 0; i < NUM_POINTS; i++) {
+        geometry_msgs::Point p;
+        p.x = nodes_arr[i]->x;
+        p.y = nodes_arr[i]->y;
+        points.points.push_back(p);
     }
-
+       marker_pub.publish(points);
 
 }
 
@@ -174,6 +182,19 @@ int main(int argc, char **argv)
 
     //Velocity control variable
     geometry_msgs::Twist vel;
+
+    points.header.frame_id = "map";
+    points.id = 0;
+    points.ns = "particles";
+    points.type = visualization_msgs::Marker::POINTS;
+    points.action = 0;
+    points.color.g = 1;
+    points.color.a = 1;
+    points.lifetime = ros::Duration(0);
+    points.frame_locked = true;
+    points.pose.orientation.w = 1.0;
+    points.scale.x = 0.05;
+    points.scale.y = 0.05;
 
     //Set the loop rate
     ros::Rate loop_rate(20);    //20Hz update rate
