@@ -39,7 +39,9 @@ typedef Eigen::Matrix<float, 3, 1> Vector3f;
 ros::Publisher marker_pub;
 
 volatile bool first_pose = false;
+volatile bool first_map = false;
 node pose;
+nav_msgs::OccupancyGrid map_msg;
 std::vector<node*> nodes_arr; // 3 for the waypoints
 
 short sgn(int x ) { return x >=0 ? 1 : -1; }
@@ -80,13 +82,13 @@ void bresenham(int x0, int y0, int x1, int y1, std::vector<int>& x, std::vector<
     }
 }
 
-void generate_nodes(const nav_msgs::OccupancyGrid& msg) {
+void generate_nodes() {
     int count = 0;
     while (count < NUM_POINTS) {
         float rand_x = FRAND_TO(MAP_WIDTH*RESOLUTION);
         float rand_y = FRAND_TO(MAP_WIDTH*RESOLUTION);
 
-        if(msg.data[round(rand_y/RESOLUTION)*MAP_WIDTH + round(rand_x/RESOLUTION)] != 100) {
+        if(map_msg.data[round(rand_y/RESOLUTION)*MAP_WIDTH + round(rand_x/RESOLUTION)] != 100) {
             node *new_node = new node();
             new_node->x = rand_x;
             new_node->y = rand_y;
@@ -109,7 +111,7 @@ void generate_edges() {
     }
 }
 
-bool collision_detected(node* node_1, node* node_2, const nav_msgs::OccupancyGrid& msg) {
+bool collision_detected(node* node_1, node* node_2) {
     std::vector<int> line_x;
     std::vector<int> line_y;
     bresenham(round(node_1->x/RESOLUTION), round(node_1->y/RESOLUTION),
@@ -120,7 +122,7 @@ bool collision_detected(node* node_1, node* node_2, const nav_msgs::OccupancyGri
         line_x.pop_back();
         line_y.pop_back();
         // ROS_INFO("Check X:%d Y:%d", next_x, next_y);
-        if(msg.data[next_y*MAP_WIDTH + next_x] == 100) {
+        if(map_msg.data[next_y*MAP_WIDTH + next_x] == 100) {
             // ROS_INFO("COLLISION AT X:%d Y:%d", next_x, next_y);
             return true;
         }
@@ -128,7 +130,7 @@ bool collision_detected(node* node_1, node* node_2, const nav_msgs::OccupancyGri
     return false;
 }
 
-bool find_shortest_path(node* waypoint1, node* waypoint2, path& out_path, const nav_msgs::OccupancyGrid& msg) {
+bool find_shortest_path(node* waypoint1, node* waypoint2, path& out_path) {
     bool valid_path_found = false;
 
     while (!valid_path_found) {
@@ -138,7 +140,7 @@ bool find_shortest_path(node* waypoint1, node* waypoint2, path& out_path, const 
         } else {
             bool collision = false;
             for(int i = 1; i < out_path.nodes.size(); i++) {
-                if(collision_detected(out_path.nodes.at(i-1), out_path.nodes.at(i), msg)) {
+                if(collision_detected(out_path.nodes.at(i-1), out_path.nodes.at(i))) {
                     collision = true;
                     REMOVE_EDGE(out_path.nodes.at(i-1), out_path.nodes.at(i))
                     break;
@@ -249,20 +251,19 @@ void publish_shortest_path(path& out_path) {
     marker_pub.publish(edge_msg);
 }
 
-void prm(node* waypoint1, node* waypoint2, const nav_msgs::OccupancyGrid& msg) {
+void prm(node* waypoint1, node* waypoint2, path &out_path) {
 
-    path out_path;
     do {
       out_path.nodes.clear();
       nodes_arr.clear();
       nodes_arr.push_back(waypoint1);
       nodes_arr.push_back(waypoint2);
 
-      generate_nodes(msg);
+      generate_nodes();
       generate_edges();
       // find_shortest_path(waypoint1, waypoint2, out_path, msg);
       publish_graph();
-    } while (!find_shortest_path(waypoint1, waypoint2, out_path, msg));    
+    } while (!find_shortest_path(waypoint1, waypoint2, out_path));    
 
     for (node* n : out_path.nodes) {
       ROS_INFO("X: %f Y:%f", n->x, n->y);
@@ -274,12 +275,12 @@ void prm(node* waypoint1, node* waypoint2, const nav_msgs::OccupancyGrid& msg) {
 
 //Callback function for the Position topic (LIVE)
 
-void pose_callback(const geometry_msgs::PoseWithCovarianceStamped & msg)
+void pose_callback(const geometry_msgs::PoseStamped & msg)
 {
   //This function is called when a new position message is received
-  pose.x = msg.pose.pose.position.x; // Robot X psotition
-  pose.y = msg.pose.pose.position.y; // Robot Y psotition
-  pose.yaw = tf::getYaw(msg.pose.pose.orientation); // Robot Yaw
+  pose.x = msg.pose.position.x; // Robot X psotition
+  pose.y = msg.pose.position.y; // Robot Y psotition
+  pose.yaw = tf::getYaw(msg.pose.orientation); // Robot Yaw
   first_pose = true;
 }
 
@@ -329,17 +330,8 @@ void map_callback(const nav_msgs::OccupancyGrid& msg)
     //This function is called when a new map is received
 
     //you probably want to save the map into a form which is easy to work with
-    node* waypoint1 = new node();
-    waypoint1->x = 1;
-    waypoint1->y = 1;
-    waypoint1->yaw = 0;
-
-    node* waypoint2 = new node();
-    waypoint2->x = 4;
-    waypoint2->y = 8;
-    waypoint2->yaw = 0;
-
-    prm(waypoint1, waypoint2, msg);
+    map_msg = msg;
+    first_map = true;
 }
 
 float steering_angle(node *start, node *end, node *curr_pose, float &v_f) {
@@ -357,12 +349,12 @@ float steering_angle(node *start, node *end, node *curr_pose, float &v_f) {
 int main(int argc, char **argv)
 {
   //Initialize the ROS framework
-    ros::init(argc,argv,"main_control");
+    ros::init(argc,argv,"prm");
     ros::NodeHandle n;
 
     //Subscribe to the desired topics and assign callbacks
     ros::Subscriber map_sub = n.subscribe("/map", 1, map_callback);
-    ros::Subscriber pose_sub = n.subscribe("/indoor_pos", 1, pose_callback);
+    ros::Subscriber pose_sub = n.subscribe("/pose", 1, pose_callback);
 
     //Setup topics to Publish from this node
     ros::Publisher velocity_publisher = n.advertise<geometry_msgs::Twist>("/cmd_vel_mux/input/navi", 1);
@@ -374,44 +366,33 @@ int main(int argc, char **argv)
     //Set the loop rate
     ros::Rate loop_rate(20);    //20Hz update rate
 
-    node nodes[4];
-    nodes[0].x = 0;
-    nodes[0].y = 0;
-    nodes[1].x = 1;
-    nodes[1].y = 0;
-    nodes[2].x = 0;
-    nodes[2].y = 1;
-    nodes[3].x = 1;
-    nodes[3].y = 2;
-    SET_EDGE(&nodes[0],&nodes[1]);
-    SET_EDGE(&nodes[0],&nodes[2]);
-    // SET_EDGE(&nodes[0],&nodes[3]);
-    SET_EDGE(&nodes[1],&nodes[2]);
-    SET_EDGE(&nodes[1],&nodes[3]);
-    SET_EDGE(&nodes[2],&nodes[3]);
-    path out_path;
-    bool found = a_star(&nodes[0], &nodes[3], out_path);
-    for (node* n : out_path.nodes) {
-      ROS_INFO("x: %f y: %f", n->x, n->y);
-    }
-    std::vector<node*>::iterator path_it = out_path.nodes.begin();
-    node *prev_node = &pose;
 
     first_pose = false;
-    ROS_INFO("Waiting for First Pose");
-    while (ros::ok() && !first_pose) {
+    ROS_INFO("Waiting for First Pose and Map");
+    while (ros::ok() && (!first_pose || !first_map)) {
       loop_rate.sleep(); //Maintain the loop rate
       ros::spinOnce();   //Check for new messages
     }
-    ROS_INFO("Got First Pose");
+    ROS_INFO("Got First Pose and Map");
 
+    path out_path;
+    node waypoint1;
+    node waypoint2;
+    waypoint1.x = 1;
+    waypoint1.y = 1;
+    waypoint2.x = 4;
+    waypoint2.y = 8;
+
+    prm(&waypoint1, &waypoint2, out_path);
+    std::vector<node*>::iterator path_it = out_path.nodes.begin();
+    node *prev_node = &pose;
     while (ros::ok())
     {
       loop_rate.sleep(); //Maintain the loop rate
       ros::spinOnce();   //Check for new messages
       //Main loop code goes here:
 
-      float v_f = 0.1;
+      float v_f = 0.4;
 
       float ang = steering_angle(prev_node, *path_it, &pose, v_f);
       vel.linear.x = v_f; // set linear speed
