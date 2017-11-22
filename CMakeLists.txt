@@ -16,6 +16,10 @@ find_package(catkin REQUIRED COMPONENTS
   visualization_msgs
 )
 
+find_package( PkgConfig )
+pkg_check_modules (EIGEN3 REQUIRED eigen3)
+include_directories( ${EIGEN3_INCLUDE_DIRS} )
+
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -90,6 +94,7 @@ catkin_package(
 #  LIBRARIES turtlebot_prm
 #  CATKIN_DEPENDS gazebo_msgs geometry_msgs nav_msgs roscpp rospy sensor_msgs std_msgs tf visualization_msgs
 #  DEPENDS system_lib
+   DEPENDS Eigen3
 )
 set(CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}")
 ###########
