@@ -15,23 +15,31 @@
 #include <visualization_msgs/Marker.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
+#include <eigen3/Eigen/Dense>
 
 #include "a_star.h"
 
-ros::Publisher marker_pub;
 
 #define TAGID 0
+#define K_STEER 1
+#define K_SOFT 0.05
+#define DIST_THRESH 0.05
+
+typedef Eigen::Matrix<float, 3, 1> Vector3f;
+
+volatile bool first_pose = false;
+node pose;
+ros::Publisher marker_pub;
 
 //Callback function for the Position topic (LIVE)
 
 void pose_callback(const geometry_msgs::PoseWithCovarianceStamped & msg)
 {
   //This function is called when a new position message is received
-  double X = msg.pose.pose.position.x; // Robot X psotition
-  double Y = msg.pose.pose.position.y; // Robot Y psotition
-  double Yaw = tf::getYaw(msg.pose.pose.orientation); // Robot Yaw
-
-  std::cout << "X: " << X << ", Y: " << Y << ", Yaw: " << Yaw << std::endl ;
+  pose.x = msg.pose.pose.position.x; // Robot X psotition
+  pose.y = msg.pose.pose.position.y; // Robot Y psotition
+  pose.yaw = tf::getYaw(msg.pose.pose.orientation); // Robot Yaw
+  first_pose = true;
 }
 
 //Example of drawing a curve
@@ -82,6 +90,18 @@ void map_callback(const nav_msgs::OccupancyGrid& msg)
 }
 
 
+float steering_angle(node *start, node *end, node *curr_pose, float &v_f) {
+  float path_ang = atan2(end->y - start->y,
+                         end->x - start->x);
+  float curr_ang = atan2(curr_pose->y - start->y,
+                         curr_pose->x - start->x);
+  float diff_ang = path_ang - curr_ang;
+  float err_d = DISTANCE_NODES(start,curr_pose)*sin(diff_ang);// cross-track error
+  float err_h = path_ang - curr_pose->yaw;
+  v_f /= (1+10*fabs(err_d));
+  return err_h + atan(K_STEER*err_d/(K_SOFT + v_f));
+}
+
 int main(int argc, char **argv)
 {
   //Initialize the ROS framework
@@ -110,7 +130,7 @@ int main(int argc, char **argv)
     nodes[2].x = 0;
     nodes[2].y = 1;
     nodes[3].x = 1;
-    nodes[3].y = 1;
+    nodes[3].y = 2;
     SET_EDGE(&nodes[0],&nodes[1]);
     SET_EDGE(&nodes[0],&nodes[2]);
     // SET_EDGE(&nodes[0],&nodes[3]);
@@ -119,23 +139,43 @@ int main(int argc, char **argv)
     SET_EDGE(&nodes[2],&nodes[3]);
     path out_path;
     bool found = a_star(&nodes[0], &nodes[3], out_path);
-    ROS_INFO("found: %d length: %f", found, out_path.cost);
+    for (node* n : out_path.nodes) {
+      ROS_INFO("x: %f y: %f", n->x, n->y);
+    }
+    std::vector<node*>::iterator path_it = out_path.nodes.begin();
+    node *prev_node = &pose;
+
+    first_pose = false;
+    ROS_INFO("Waiting for First Pose");
+    while (ros::ok() && !first_pose) {
+      loop_rate.sleep(); //Maintain the loop rate
+      ros::spinOnce();   //Check for new messages
+    }
+    ROS_INFO("Got First Pose");
 
     while (ros::ok())
     {
       loop_rate.sleep(); //Maintain the loop rate
       ros::spinOnce();   //Check for new messages
-
-   //Draw Curves
-         drawCurve(1);
-         drawCurve(2);
-         drawCurve(4);
-    
       //Main loop code goes here:
-      vel.linear.x = 0.1; // set linear speed
-      vel.angular.z = 0.3; // set angular speed
+
+      float v_f = 0.1;
+
+      float ang = steering_angle(prev_node, *path_it, &pose, v_f);
+      vel.linear.x = v_f; // set linear speed
+      vel.angular.z = ang; // set angular speed
 
       velocity_publisher.publish(vel); // Publish the command velocity
+
+      if (DISTANCE_NODES(&pose,*path_it) < DIST_THRESH) {
+        prev_node = *path_it;
+        path_it++;
+        if (path_it == out_path.nodes.end()) {
+          break;
+        }
+        ROS_INFO("FROM X:%f Y:%f", prev_node->x, prev_node->y);
+        ROS_INFO("TO X:%f Y:%f", (*path_it)->x, (*path_it)->y);
+      }
     }
 
     return 0;

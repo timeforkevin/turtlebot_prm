@@ -5,12 +5,14 @@
 
 #define SET_EDGE(M,N) (M)->adj.push_back(N); (N)->adj.push_back(M);
 
-#define DISTANCE(X,Y) (sqrt((X->x - Y->x)*(X->x - Y->x) \
-                          + (X->y - Y->y)*(X->y - Y->y)))
+#define DISTANCE(X1,X2,Y1,Y2) (sqrt(((X1)-(X2))*((X1)-(X2))\
+                                  + ((Y1)-(Y2))*((Y1)-(Y2))))
+#define DISTANCE_NODES(X,Y) (DISTANCE((X)->x,(Y)->x,(X)->y,(Y)->y))
 
 typedef struct node_t {
-  int x;
-  int y;
+  float x;
+  float y;
+  float yaw;
   std::vector<node_t*> adj;
 } node;
 

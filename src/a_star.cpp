@@ -14,7 +14,7 @@ bool a_star(node *start, node *end, path &out_path) {
 
   path *init_path = new path();
   init_path->nodes.push_back(start);
-  init_path->cost = DISTANCE(start,end);
+  init_path->cost = DISTANCE_NODES(start,end);
 
   open_set.insert(init_path);
   bool path_found = false;
@@ -62,9 +62,9 @@ ROS_INFO("ENCOUNTERED NODE WITH EMPTY ADJACENCY SET");
       // check if neighbours in open set
       path *n_path = NULL;
       float n_cost = cur_cost
-                     - DISTANCE(cur_path->nodes.back(),end)
-                     + DISTANCE(cur_path->nodes.back(),n)
-                     + DISTANCE(n,end);
+                     - DISTANCE_NODES(cur_path->nodes.back(),end)
+                     + DISTANCE_NODES(cur_path->nodes.back(),n)
+                     + DISTANCE_NODES(n,end);
       for (path *p : open_set) {
         if (n == p->nodes.back()) {
           // found in open set
