@@ -96,8 +96,8 @@ void generate_nodes(const nav_msgs::OccupancyGrid& msg) {
 }
 
 void generate_edges() {
-    for(int i = 0; i < NUM_POINTS; i++) {
-        for(int j = 0; j < NUM_POINTS; j++) {
+    for(int i = 0; i < nodes_arr.size(); i++) {
+        for(int j = 0; j < nodes_arr.size(); j++) {
             if (i==j) continue;
 
             if (DISTANCE_NODES(nodes_arr.at(i), nodes_arr.at(j)) < RADIUS_THRESHOLD) {
