@@ -207,6 +207,39 @@ void publish_graph() {
     marker_pub.publish(milestone_msg);
 }
 
+void publish_shortest_path(path& out_path) {
+    for(int i = 1; i < out_path.nodes.size(); i++) {
+
+        id++; // Increase the ID
+        visualization_msgs::Marker edge_msg;
+        edge_msg.id = id;
+        edge_msg.header.frame_id = "map";
+        edge_msg.header.stamp = ros::Time();
+        edge_msg.ns = "localization";
+        edge_msg.action = visualization_msgs::Marker::ADD;
+        edge_msg.type = visualization_msgs::Marker::LINE_STRIP;
+        edge_msg.scale.x = 0.02;
+        edge_msg.scale.y = 0.02;
+        edge_msg.scale.z = 0.02;
+        edge_msg.color.a = 1.0;
+        edge_msg.color.r = 1.0;
+        edge_msg.color.g = 0.0;
+        edge_msg.color.b = 0.0;
+
+        geometry_msgs::Point m1;
+        m1.x = outpath.nodes.at(i-1)->x;
+        m1.y = outpath.nodes.at(i-1)->y;
+        edge_msg.points.push_back(m1);
+
+        geometry_msgs::Point m2;
+        m2.x = outpath.nodes.at(i)->x;
+        m2.y = outpath.nodes.at(i-1)->y;
+        edge_msg.points.push_back(m2);
+
+        marker_pub.publish(edge_msg);
+    }
+}
+
 void prm(node* waypoint1, node* waypoint2, const nav_msgs::OccupancyGrid& msg) {
 
 
@@ -215,11 +248,14 @@ void prm(node* waypoint1, node* waypoint2, const nav_msgs::OccupancyGrid& msg) {
 
     generate_nodes(msg);
     generate_edges();
+    publish_graph();
 
     path out_path;
-    find_shortest_path(waypoint1, waypoint2, out_path, msg);
+    bool found = find_shortest_path(waypoint1, waypoint2, out_path, msg);
 
-    publish_graph();
+    if (found) {
+        publish_shortest_path();
+    }
 }
 
 //Callback function for the Position topic (LIVE)
