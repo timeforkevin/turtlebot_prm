@@ -28,10 +28,10 @@
 #define K_SOFT 1
 #define DIST_THRESH 0.25
 #define MAP_WIDTH 100
-#define NUM_POINTS 500
+#define NUM_POINTS 300
 #define RESOLUTION 0.1
 #define RADIUS_THRESHOLD 5
-#define BOUNDING_RAD 0.45
+#define BOUNDING_RAD 0.48
 #define FRAND_TO(X) (static_cast <double> (rand()) / (static_cast <double> (RAND_MAX/(X))))
 
 #define POINT_IN_MAP(X,Y) (X > -1 && X < MAP_WIDTH && Y > -1 && Y < MAP_WIDTH)
@@ -324,7 +324,9 @@ void prm(node* waypoints, int num_waypoints, path &out_path) {
         nodes_arr.push_back(&waypoints[i]);
       }
       generate_nodes();
+      ROS_INFO("GENERATED NODES");
       generate_edges();
+      ROS_INFO("GENERATED EDGES");
 
       for (int i = 0; i < num_waypoints-1; i++) {
         path path_seg;
@@ -458,7 +460,7 @@ int main(int argc, char **argv)
 
     path out_path;
     node waypoints[4];
-    waypoints[1].x = pose.x;
+    waypoints[0].x = pose.x;
     waypoints[0].y = pose.y;
     waypoints[1].x = 4;
     waypoints[1].y = 0;
