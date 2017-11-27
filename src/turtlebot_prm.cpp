@@ -30,7 +30,10 @@
 #define NUM_POINTS 100
 #define RESOLUTION 0.1
 #define RADIUS_THRESHOLD 5
+#define BOUNDING_RAD 0.5
 #define FRAND_TO(X) (static_cast <double> (rand()) / (static_cast <double> (RAND_MAX/(X))))
+
+#define POINT_IN_MAP(X,Y) (X > -1 && X < MAP_WIDTH && Y > -1 && Y < MAP_WIDTH)
 
 
 typedef Eigen::Matrix<float, 3, 1> Vector3f;
@@ -41,7 +44,7 @@ ros::Publisher marker_pub;
 volatile bool first_pose = false;
 volatile bool first_map = false;
 node pose;
-nav_msgs::OccupancyGrid map_msg;
+std::vector<unsigned char> map_msg_data(MAP_WIDTH*MAP_WIDTH, 0);
 std::vector<node*> nodes_arr; // 3 for the waypoints
 
 short sgn(int x ) { return x >=0 ? 1 : -1; }
@@ -82,13 +85,46 @@ void bresenham(int x0, int y0, int x1, int y1, std::vector<int>& x, std::vector<
     }
 }
 
+
+void two_lines(std::vector<unsigned char>& buffer, int cirx, int ciry, int x, int y) {
+  for (int i = cirx - x; i < cirx + x; i += sgn(x)) {
+    if (POINT_IN_MAP(i, ciry+y)) {
+      buffer[(ciry+y)*MAP_WIDTH + i] = 100;
+    }
+    if (POINT_IN_MAP(i, ciry-y)) {
+      buffer[(ciry-y)*MAP_WIDTH + i] = 100;
+    }
+  }
+}
+
+void draw_circle(std::vector<unsigned char>& buffer, int cirx, int ciry, int radius) {
+  int error = -radius;
+  int x = radius;
+  int y = 0;
+  while (x >= y) {
+    int prev_y = y;
+    error += y;
+    y++;
+    error += y;
+    two_lines(buffer, cirx, ciry, x, prev_y);
+    if (error >= 0) {
+      if (x != prev_y) {
+        two_lines(buffer, cirx, ciry, prev_y, x);
+      }
+      error -= x;
+      x--;
+      error -= x;
+    }
+  }
+}
+
 void generate_nodes() {
     int count = 0;
     while (count < NUM_POINTS) {
         float rand_x = FRAND_TO(MAP_WIDTH*RESOLUTION);
         float rand_y = FRAND_TO(MAP_WIDTH*RESOLUTION);
 
-        if(map_msg.data[round(rand_y/RESOLUTION)*MAP_WIDTH + round(rand_x/RESOLUTION)] != 100) {
+        if(map_msg_data[round(rand_y/RESOLUTION)*MAP_WIDTH + round(rand_x/RESOLUTION)] != 100) {
             node *new_node = new node();
             new_node->x = rand_x;
             new_node->y = rand_y;
@@ -122,7 +158,7 @@ bool collision_detected(node* node_1, node* node_2) {
         line_x.pop_back();
         line_y.pop_back();
         // ROS_INFO("Check X:%d Y:%d", next_x, next_y);
-        if(map_msg.data[next_y*MAP_WIDTH + next_x] == 100) {
+        if(map_msg_data[next_y*MAP_WIDTH + next_x] == 100) {
             // ROS_INFO("COLLISION AT X:%d Y:%d", next_x, next_y);
             return true;
         }
@@ -130,6 +166,16 @@ bool collision_detected(node* node_1, node* node_2) {
     return false;
 }
 
+void bounding_box(const nav_msgs::OccupancyGrid& msg, std::vector<unsigned char>& buffer) {
+  for (int i = 0; i < MAP_WIDTH; i++) {
+    for (int j = 0; j < MAP_WIDTH; j++) {
+      if (msg.data[j*MAP_WIDTH + i]) {
+        // circle around i j
+        draw_circle(buffer, i, j, BOUNDING_RAD/RESOLUTION);
+      }
+    }
+  }
+}
 bool find_shortest_path(node* waypoint1, node* waypoint2, path& out_path) {
     bool valid_path_found = false;
 
@@ -330,7 +376,7 @@ void map_callback(const nav_msgs::OccupancyGrid& msg)
     //This function is called when a new map is received
 
     //you probably want to save the map into a form which is easy to work with
-    map_msg = msg;
+    bounding_box(msg, map_msg_data);
     first_map = true;
 }
 
