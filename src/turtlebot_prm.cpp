@@ -30,7 +30,7 @@
 #define NUM_POINTS 100
 #define RESOLUTION 0.1
 #define RADIUS_THRESHOLD 5
-#define BOUNDING_RAD 0.5
+#define BOUNDING_RAD 0.25
 #define FRAND_TO(X) (static_cast <double> (rand()) / (static_cast <double> (RAND_MAX/(X))))
 
 #define POINT_IN_MAP(X,Y) (X > -1 && X < MAP_WIDTH && Y > -1 && Y < MAP_WIDTH)
@@ -40,12 +40,14 @@ typedef Eigen::Matrix<float, 3, 1> Vector3f;
 
 
 ros::Publisher marker_pub;
+ros::Publisher map_pub;
 
 volatile bool first_pose = false;
 volatile bool first_map = false;
 node pose;
-std::vector<unsigned char> map_msg_data(MAP_WIDTH*MAP_WIDTH, 0);
+std::vector<signed char, std::allocator<signed char> > map_msg_data(MAP_WIDTH*MAP_WIDTH, 0);
 std::vector<node*> nodes_arr; // 3 for the waypoints
+nav_msgs::OccupancyGrid map_msg;
 
 short sgn(int x ) { return x >=0 ? 1 : -1; }
 
@@ -86,7 +88,7 @@ void bresenham(int x0, int y0, int x1, int y1, std::vector<int>& x, std::vector<
 }
 
 
-void two_lines(std::vector<unsigned char>& buffer, int cirx, int ciry, int x, int y) {
+void two_lines(std::vector<signed char, std::allocator<signed char> >& buffer, int cirx, int ciry, int x, int y) {
   for (int i = cirx - x; i < cirx + x; i += sgn(x)) {
     if (POINT_IN_MAP(i, ciry+y)) {
       buffer[(ciry+y)*MAP_WIDTH + i] = 100;
@@ -97,7 +99,7 @@ void two_lines(std::vector<unsigned char>& buffer, int cirx, int ciry, int x, in
   }
 }
 
-void draw_circle(std::vector<unsigned char>& buffer, int cirx, int ciry, int radius) {
+void draw_circle(std::vector<signed char, std::allocator<signed char> >& buffer, int cirx, int ciry, int radius) {
   int error = -radius;
   int x = radius;
   int y = 0;
@@ -166,7 +168,7 @@ bool collision_detected(node* node_1, node* node_2) {
     return false;
 }
 
-void bounding_box(const nav_msgs::OccupancyGrid& msg, std::vector<unsigned char>& buffer) {
+void bounding_box(const nav_msgs::OccupancyGrid& msg, std::vector<signed char, std::allocator<signed char> >& buffer) {
   for (int i = 0; i < MAP_WIDTH; i++) {
     for (int j = 0; j < MAP_WIDTH; j++) {
       if (msg.data[j*MAP_WIDTH + i]) {
@@ -377,6 +379,10 @@ void map_callback(const nav_msgs::OccupancyGrid& msg)
 
     //you probably want to save the map into a form which is easy to work with
     bounding_box(msg, map_msg_data);
+    nav_msgs::OccupancyGrid bounded_map_msg = msg;
+    bounded_map_msg.data = map_msg_data;
+    map_pub.publish(bounded_map_msg);
+    map_msg = bounded_map_msg;
     first_map = true;
 }
 
@@ -403,6 +409,7 @@ int main(int argc, char **argv)
     ros::Subscriber pose_sub = n.subscribe("/pose", 1, pose_callback);
 
     //Setup topics to Publish from this node
+    map_pub = n.advertise<nav_msgs::OccupancyGrid>("/map_bounded", 2);
     ros::Publisher velocity_publisher = n.advertise<geometry_msgs::Twist>("/cmd_vel_mux/input/navi", 1);
     marker_pub = n.advertise<visualization_msgs::Marker>("visualization_marker", 1, true);
 
@@ -420,6 +427,7 @@ int main(int argc, char **argv)
       ros::spinOnce();   //Check for new messages
     }
     ROS_INFO("Got First Pose and Map");
+    map_pub.publish(map_msg);
 
     path out_path;
     node waypoint1;
