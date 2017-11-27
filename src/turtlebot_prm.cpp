@@ -21,16 +21,17 @@
 
 #include "a_star.h"
 
-
+#define MAP_ORIGIN_X -1
+#define MAP_ORIGIN_Y -5
 #define TAGID 0
 #define K_STEER 1
 #define K_SOFT 1
 #define DIST_THRESH 0.25
 #define MAP_WIDTH 100
-#define NUM_POINTS 100
+#define NUM_POINTS 500
 #define RESOLUTION 0.1
 #define RADIUS_THRESHOLD 5
-#define BOUNDING_RAD 0.25
+#define BOUNDING_RAD 0.45
 #define FRAND_TO(X) (static_cast <double> (rand()) / (static_cast <double> (RAND_MAX/(X))))
 
 #define POINT_IN_MAP(X,Y) (X > -1 && X < MAP_WIDTH && Y > -1 && Y < MAP_WIDTH)
@@ -39,6 +40,8 @@
 typedef Eigen::Matrix<float, 3, 1> Vector3f;
 
 
+std::random_device rd;
+std::mt19937 e2(rd());
 ros::Publisher marker_pub;
 ros::Publisher map_pub;
 
@@ -121,20 +124,32 @@ void draw_circle(std::vector<signed char, std::allocator<signed char> >& buffer,
 }
 
 void generate_nodes() {
-    int count = 0;
-    while (count < NUM_POINTS) {
-        float rand_x = FRAND_TO(MAP_WIDTH*RESOLUTION);
-        float rand_y = FRAND_TO(MAP_WIDTH*RESOLUTION);
+  static std::normal_distribution<double> dist(0.0, 2);
+  int count = 0;
+  while (count < NUM_POINTS) {
+    float rand_x1 = FRAND_TO(MAP_WIDTH*RESOLUTION);
+    float rand_y1 = FRAND_TO(MAP_WIDTH*RESOLUTION);
+    float rand_x2 = dist(e2) + rand_x1;
+    float rand_y2 = dist(e2) + rand_y1;
+    float rand_xmid = (rand_x1 + rand_x2)/2;
+    float rand_ymid = (rand_y1 + rand_y2)/2;
 
-        if(map_msg_data[round(rand_y/RESOLUTION)*MAP_WIDTH + round(rand_x/RESOLUTION)] != 100) {
-            node *new_node = new node();
-            new_node->x = rand_x;
-            new_node->y = rand_y;
-            new_node->yaw = 0;
-            nodes_arr.push_back(new_node);
-            count += 1;
-        }
+    if (POINT_IN_MAP(rand_x1,rand_y1) && 
+        POINT_IN_MAP(rand_xmid,rand_ymid) && 
+        POINT_IN_MAP(rand_x2,rand_y2)) {
+      if (map_msg_data[round(rand_y1/RESOLUTION)*MAP_WIDTH + round(rand_x1/RESOLUTION)] == 100 &&
+          map_msg_data[round(rand_ymid/RESOLUTION)*MAP_WIDTH + round(rand_xmid/RESOLUTION)] != 100 &&
+          map_msg_data[round(rand_y2/RESOLUTION)*MAP_WIDTH + round(rand_x2/RESOLUTION)] == 100) {
+        node *new_node = new node();
+        new_node->x = MAP_ORIGIN_X+rand_xmid;
+        new_node->y = MAP_ORIGIN_Y+rand_ymid;
+        new_node->yaw = 0;
+        nodes_arr.push_back(new_node);
+        count += 1;
+      }
     }
+    
+  }
 }
 
 void generate_edges() {
@@ -152,8 +167,8 @@ void generate_edges() {
 bool collision_detected(node* node_1, node* node_2) {
     std::vector<int> line_x;
     std::vector<int> line_y;
-    bresenham(round(node_1->x/RESOLUTION), round(node_1->y/RESOLUTION),
-              round(node_2->x/RESOLUTION), round(node_2->y/RESOLUTION), line_x, line_y);
+    bresenham(round((node_1->x-MAP_ORIGIN_X)/RESOLUTION), round((node_1->y-MAP_ORIGIN_Y)/RESOLUTION),
+              round((node_2->x-MAP_ORIGIN_X)/RESOLUTION), round((node_2->y-MAP_ORIGIN_Y)/RESOLUTION), line_x, line_y);
     while (!line_x.empty()) {
         int next_x = line_x.back();
         int next_y = line_y.back();
@@ -182,26 +197,27 @@ bool find_shortest_path(node* waypoint1, node* waypoint2, path& out_path) {
     bool valid_path_found = false;
 
     while (!valid_path_found) {
-        if (!a_star(waypoint1, waypoint2, out_path)) {
-            ROS_INFO("A_STAR FAILED");
-            break;
-        } else {
-            bool collision = false;
-            for(int i = 1; i < out_path.nodes.size(); i++) {
-                if(collision_detected(out_path.nodes.at(i-1), out_path.nodes.at(i))) {
-                    collision = true;
-                    REMOVE_EDGE(out_path.nodes.at(i-1), out_path.nodes.at(i))
-                    break;
-                }
-            }
-            if (collision) {
-                // ROS_INFO("COLLSION");
-                continue;
-            } else {
-                valid_path_found = true;
-            }
+      // ROS_INFO("ASTAR X1: %f Y1: %f X2: %f Y2: %f", waypoint1->x, waypoint1->y, waypoint2->x, waypoint2->y);
+      if (!a_star(waypoint1, waypoint2, out_path)) {
+        ROS_INFO("A_STAR FAILED");
+        break;
+      } else {
+        bool collision = false;
+        for(int i = 1; i < out_path.nodes.size(); i++) {
 
+          if(collision_detected(out_path.nodes.at(i-1), out_path.nodes.at(i))) {
+            collision = true;
+            REMOVE_EDGE(out_path.nodes.at(i-1), out_path.nodes.at(i))
+            break;
+          }
         }
+        if (collision) {
+          continue;
+        } else {
+          valid_path_found = true;
+        }
+
+      }
     }
     ROS_INFO("VALID PATH: %d", valid_path_found);
     return valid_path_found;
@@ -299,26 +315,37 @@ void publish_shortest_path(path& out_path) {
     marker_pub.publish(edge_msg);
 }
 
-void prm(node* waypoint1, node* waypoint2, path &out_path) {
-
+void prm(node* waypoints, int num_waypoints, path &out_path) {
+    bool path_found = true;
     do {
       out_path.nodes.clear();
       nodes_arr.clear();
-      nodes_arr.push_back(waypoint1);
-      nodes_arr.push_back(waypoint2);
-
+      for (int i = 0; i < num_waypoints; i++) {
+        nodes_arr.push_back(&waypoints[i]);
+      }
       generate_nodes();
       generate_edges();
-      // find_shortest_path(waypoint1, waypoint2, out_path, msg);
-      publish_graph();
-    } while (!find_shortest_path(waypoint1, waypoint2, out_path));    
+
+      for (int i = 0; i < num_waypoints-1; i++) {
+        path path_seg;
+        path_found &= find_shortest_path(&waypoints[i], &waypoints[i+1], path_seg);
+        ROS_INFO("RAN SHORTEST PATH");
+        if (!path_found) {
+          ROS_INFO("PATH NOT FOUND");
+          break;
+        }
+        out_path.nodes.insert(out_path.nodes.end(), path_seg.nodes.begin(), path_seg.nodes.end());
+        out_path.cost += path_seg.cost;
+      }
+
+    } while (!path_found);
+    publish_graph();
 
     for (node* n : out_path.nodes) {
       ROS_INFO("X: %f Y:%f", n->x, n->y);
     }
-    // if (found) {
-        publish_shortest_path(out_path);
-    // }
+    ROS_INFO("publish");
+    publish_shortest_path(out_path);
 }
 
 //Callback function for the Position topic (LIVE)
@@ -430,14 +457,19 @@ int main(int argc, char **argv)
     map_pub.publish(map_msg);
 
     path out_path;
-    node waypoint1;
-    node waypoint2;
-    waypoint1.x = 1;
-    waypoint1.y = 1;
-    waypoint2.x = 4;
-    waypoint2.y = 8;
-
-    prm(&waypoint1, &waypoint2, out_path);
+    node waypoints[4];
+    waypoints[1].x = pose.x;
+    waypoints[0].y = pose.y;
+    waypoints[1].x = 4;
+    waypoints[1].y = 0;
+    waypoints[2].x = 8;
+    waypoints[2].y = -4;
+    waypoints[3].x = 8;
+    waypoints[3].y = 0;
+    prm(waypoints, 4, out_path);
+    for (node* n : out_path.nodes) {
+      ROS_INFO("X: %f Y: %f", n->x, n->y);
+    }
     std::vector<node*>::iterator path_it = out_path.nodes.begin();
     node *prev_node = &pose;
     while (ros::ok())
