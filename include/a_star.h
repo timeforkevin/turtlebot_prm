@@ -8,6 +8,7 @@
 #define DISTANCE(X1,X2,Y1,Y2) (sqrt(((X1)-(X2))*((X1)-(X2))\
                                   + ((Y1)-(Y2))*((Y1)-(Y2))))
 #define DISTANCE_NODES(X,Y) (DISTANCE((X)->x,(Y)->x,(X)->y,(Y)->y))
+#define ANGLE_NODES(X,Y) atan2((Y)->y - (X)->y, (Y)->x - (X)->x);
 
 typedef struct node_t {
   float x;

@@ -26,12 +26,12 @@
 #define TAGID 0
 #define K_STEER 1
 #define K_SOFT 1
-#define DIST_THRESH 0.25
+#define DIST_THRESH 0.05
 #define MAP_WIDTH 100
-#define NUM_POINTS 300
+#define NUM_POINTS 250
 #define RESOLUTION 0.1
 #define RADIUS_THRESHOLD 5
-#define BOUNDING_RAD 0.48
+#define BOUNDING_RAD 0.45
 #define FRAND_TO(X) (static_cast <double> (rand()) / (static_cast <double> (RAND_MAX/(X))))
 
 #define POINT_IN_MAP(X,Y) (X > -1 && X < MAP_WIDTH && Y > -1 && Y < MAP_WIDTH)
@@ -279,7 +279,7 @@ void publish_graph() {
         }
     }
     marker_pub.publish(milestone_msg);
-    marker_pub.publish(edge_msg);
+    // marker_pub.publish(edge_msg);
 }
 
 void publish_shortest_path(path& out_path) {
@@ -416,16 +416,24 @@ void map_callback(const nav_msgs::OccupancyGrid& msg)
 }
 
 float steering_angle(node *start, node *end, node *curr_pose, float &v_f) {
-  float path_ang = atan2(end->y - start->y,
-                         end->x - start->x);
-  float curr_ang = atan2(curr_pose->y - start->y,
-                         curr_pose->x - start->x);
+  // float path_ang = atan2(end->y - start->y,
+  //                        end->x - start->x);
+  float path_ang = ANGLE_NODES(start, end);
+  // float curr_ang = atan2(curr_pose->y - start->y,
+  //                        curr_pose->x - start->x);
+  float curr_ang = ANGLE_NODES(start, curr_pose);
   float diff_ang = path_ang - curr_ang;
   float err_d = DISTANCE_NODES(start,curr_pose)*sin(diff_ang);// cross-track error
   float err_h = path_ang - curr_pose->yaw;
+  if (err_h < -M_PI) {
+    err_h += 2*M_PI;
+  } else if(err_h > M_PI) {
+    err_h -= 2*M_PI;
+  }
   v_f /= (1+10*fabs(err_d));
   return err_h + atan(K_STEER*err_d/(K_SOFT + v_f));
 }
+
 
 int main(int argc, char **argv)
 {
@@ -488,7 +496,13 @@ int main(int argc, char **argv)
 
       velocity_publisher.publish(vel); // Publish the command velocity
 
-      if (DISTANCE_NODES(&pose,*path_it) < DIST_THRESH) {
+
+      float dist_to_next = DISTANCE_NODES(&pose, *path_it);
+      float path_ang = ANGLE_NODES(prev_node, *path_it);
+      float ang_to_next = ANGLE_NODES(&pose, *path_it);
+      float diff_ang = path_ang - ang_to_next;
+      float dist_to_next_along_path = dist_to_next * cos(diff_ang);
+      if (fabs(dist_to_next_along_path) < DIST_THRESH) {
         prev_node = *path_it;
         path_it++;
         if (path_it == out_path.nodes.end()) {
