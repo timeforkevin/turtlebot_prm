@@ -22,15 +22,24 @@
 
 #include "a_star.h"
 
+// #define SIMULATION
+
+#ifdef SIMULATION
+  #define MAP_WIDTH 100
+  #define BOUNDING_RAD 0.45
+  #define NUM_POINTS 250
+#else
+  #define MAP_WIDTH 70
+  #define BOUNDING_RAD 0
+#endif
+
 #define TAGID 0
 #define K_STEER 0.25
 #define K_SOFT 1
 #define DIST_THRESH 0.075
-#define MAP_WIDTH 100
-#define NUM_POINTS 250
+#define NUM_POINTS 100
 #define RESOLUTION 0.1
 #define RADIUS_THRESHOLD 5
-#define BOUNDING_RAD 0.45
 #define FRAND_TO(X) (static_cast <double> (rand()) / (static_cast <double> (RAND_MAX/(X))))
 
 #define POINT_IN_MAP(X,Y) (X > -1 && X < MAP_WIDTH && Y > -1 && Y < MAP_WIDTH)
@@ -103,6 +112,11 @@ void two_lines(std::vector<signed char, std::allocator<signed char> >& buffer, i
 }
 
 void draw_circle(std::vector<signed char, std::allocator<signed char> >& buffer, int cirx, int ciry, int radius) {
+  if (radius < RESOLUTION) {
+    buffer[ciry*MAP_WIDTH + cirx] = 100;
+    return;
+  }
+
   int error = -radius;
   int x = radius;
   int y = 0;
@@ -133,7 +147,6 @@ void generate_nodes() {
     float rand_y2 = dist(e2) + rand_y1;
     float rand_xmid = (rand_x1 + rand_x2)/2;
     float rand_ymid = (rand_y1 + rand_y2)/2;
-
     if (POINT_IN_MAP(rand_x1/RESOLUTION,rand_y1/RESOLUTION) && 
         POINT_IN_MAP(rand_xmid/RESOLUTION,rand_ymid/RESOLUTION) && 
         POINT_IN_MAP(rand_x2/RESOLUTION,rand_y2/RESOLUTION)) {
@@ -230,8 +243,8 @@ void publish_graph() {
     milestone_msg.ns = "localization";
     milestone_msg.action = visualization_msgs::Marker::ADD;
     milestone_msg.type = visualization_msgs::Marker::POINTS;
-    milestone_msg.scale.x = 0.02;
-    milestone_msg.scale.y = 0.02;
+    milestone_msg.scale.x = 0.05;
+    milestone_msg.scale.y = 0.05;
     milestone_msg.scale.z = 0.2;
     milestone_msg.color.a = 1.0;
     milestone_msg.color.r = 0.0;
@@ -278,7 +291,7 @@ void publish_graph() {
         }
     }
     marker_pub.publish(milestone_msg);
-    // marker_pub.publish(edge_msg);
+    marker_pub.publish(edge_msg);
 }
 
 void publish_shortest_path(path& out_path) {
@@ -321,6 +334,10 @@ void prm(node* waypoints, int num_waypoints, path &out_path) {
       nodes_arr.clear();
       for (int i = 0; i < num_waypoints; i++) {
         nodes_arr.push_back(&waypoints[i]);
+        if (map_msg_data[round((waypoints[i].y-map_origin.y)/RESOLUTION)*MAP_WIDTH
+                       + round((waypoints[i].x-map_origin.x)/RESOLUTION)] == 100) {
+          ROS_INFO("PRM FAILED. WAYPOINT NOT IN FREE SPACE X: %f Y: %f", waypoints[i].x, waypoints[i].y);
+        }
       }
       generate_nodes();
       ROS_INFO("GENERATED NODES");
@@ -369,6 +386,17 @@ void pose_callback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg
   first_pose = true;
 }
 
+//Callback function for the Position topic (SIMULATION)
+void sim_pose_callback(const gazebo_msgs::ModelStates& msg) {
+  int i = 0;
+  for(i = 0; i < msg.name.size(); i++) if(msg.name[i] == "mobile_base") break;
+  pose.x = msg.pose[i].position.x;
+  pose.y = msg.pose[i].position.y;
+  pose.yaw = tf::getYaw(msg.pose[i].orientation);
+  first_pose = true;
+}
+
+
 //Example of drawing a curve
 void drawCurve(int k)
 {
@@ -412,17 +440,25 @@ void drawCurve(int k)
 //Callback function for the map
 void map_callback(const nav_msgs::OccupancyGrid& msg)
 {
-    //This function is called when a new map is received
+  //This function is called when a new map is received
 
-    //you probably want to save the map into a form which is easy to work with
-    map_origin.x = msg.info.origin.position.x;
-    map_origin.y = msg.info.origin.position.y;
-    bounding_box(msg, map_msg_data);
-    nav_msgs::OccupancyGrid bounded_map_msg = msg;
-    bounded_map_msg.data = map_msg_data;
-    map_pub.publish(bounded_map_msg);
-    map_msg = bounded_map_msg;
-    first_map = true;
+  //you probably want to save the map into a form which is easy to work with
+  map_origin.x = msg.info.origin.position.x;
+  map_origin.y = msg.info.origin.position.y;
+#ifdef SIMULATION
+  bounding_box(msg, map_msg_data);
+  nav_msgs::OccupancyGrid bounded_map_msg = msg;
+  bounded_map_msg.data = map_msg_data;
+  map_pub.publish(bounded_map_msg);
+  map_msg = bounded_map_msg;
+#else
+  // for (int i = 0; i < MAP_WIDTH*MAP_WIDTH; i++) {
+  //   map_msg_data[i] = msg.data[i];
+  // }
+  map_msg_data = msg.data;
+#endif
+  first_map = true;
+  // ROS_INFO("MAP");
 }
 
 float steering_angle(node *start, node *end, node *curr_pose, float &v_f) {
@@ -435,6 +471,7 @@ float steering_angle(node *start, node *end, node *curr_pose, float &v_f) {
   float diff_ang = path_ang - curr_ang;
   float err_d = DISTANCE_NODES(start,curr_pose)*sin(diff_ang);// cross-track error
   float err_h = path_ang - curr_pose->yaw;
+  // ROS_INFO("heading_err: %f, cross-track: %f", err_h, err_d );
   if (err_h < -M_PI) {
     err_h += 2*M_PI;
   } else if(err_h > M_PI) {
@@ -444,85 +481,97 @@ float steering_angle(node *start, node *end, node *curr_pose, float &v_f) {
   return err_h + atan(K_STEER*err_d/(K_SOFT + v_f));
 }
 
-
 int main(int argc, char **argv)
 {
   //Initialize the ROS framework
-    ros::init(argc,argv,"prm");
-    ros::NodeHandle n;
-
-    //Subscribe to the desired topics and assign callbacks
-    ros::Subscriber map_sub = n.subscribe("/map", 1, map_callback);
-    // ros::Subscriber pose_sub = n.subscribe("/pose", 1, pose_callback);
-    ros::Subscriber pose_sub = n.subscribe("/indoor_pose", 1, pose_callback);
-
-    //Setup topics to Publish from this node
-    map_pub = n.advertise<nav_msgs::OccupancyGrid>("/map_bounded", 2);
-    ros::Publisher velocity_publisher = n.advertise<geometry_msgs::Twist>("/cmd_vel_mux/input/navi", 1);
-    marker_pub = n.advertise<visualization_msgs::Marker>("visualization_marker", 1, true);
-
-    //Velocity control variable
-    geometry_msgs::Twist vel;
-
-    //Set the loop rate
-    ros::Rate loop_rate(20);    //20Hz update rate
+  ros::init(argc,argv,"prm");
+  ros::NodeHandle n;
 
 
-    first_pose = false;
-    ROS_INFO("Waiting for First Pose and Map");
-    while (ros::ok() && (!first_pose || !first_map)) {
-      loop_rate.sleep(); //Maintain the loop rate
-      ros::spinOnce();   //Check for new messages
-    }
-    ROS_INFO("Got First Pose and Map");
-    map_pub.publish(map_msg);
+  //Subscribe to the desired topics and assign callbacks
+  ros::Subscriber map_sub = n.subscribe("/map", 1, map_callback);
+  // ros::Subscriber pose_sub = n.subscribe("/pose", 1, pose_callback);
+  ros::Subscriber pose_sub = n.subscribe("/indoor_pos", 1, pose_callback);
 
-    path out_path;
-    node waypoints[4];
-    waypoints[0].x = pose.x;
-    waypoints[0].y = pose.y;
-    waypoints[1].x = 4;
-    waypoints[1].y = 0;
-    waypoints[2].x = 8;
-    waypoints[2].y = -4;
-    waypoints[3].x = 8;
-    waypoints[3].y = 0;
-    prm(waypoints, 4, out_path);
-    for (node* n : out_path.nodes) {
-      ROS_INFO("X: %f Y: %f", n->x, n->y);
-    }
-    std::vector<node*>::iterator path_it = out_path.nodes.begin();
-    node *prev_node = &pose;
-    while (ros::ok())
-    {
-      loop_rate.sleep(); //Maintain the loop rate
-      ros::spinOnce();   //Check for new messages
-      //Main loop code goes here:
-
-      float v_f = 0.4;
-
-      float ang = steering_angle(prev_node, *path_it, &pose, v_f);
-      vel.linear.x = v_f; // set linear speed
-      vel.angular.z = ang; // set angular speed
-
-      velocity_publisher.publish(vel); // Publish the command velocity
+  ros::Subscriber sim_pose_sub = n.subscribe("/gazebo/model_states", 1, sim_pose_callback);
 
 
-      float dist_to_next = DISTANCE_NODES(&pose, *path_it);
-      float path_ang = ANGLE_NODES(prev_node, *path_it);
-      float ang_to_next = ANGLE_NODES(&pose, *path_it);
-      float diff_ang = path_ang - ang_to_next;
-      float dist_to_next_along_path = dist_to_next * cos(diff_ang);
-      if (fabs(dist_to_next_along_path) < DIST_THRESH) {
-        prev_node = *path_it;
-        path_it++;
-        if (path_it == out_path.nodes.end()) {
-          break;
-        }
-        ROS_INFO("FROM X:%f Y:%f", prev_node->x, prev_node->y);
-        ROS_INFO("TO X:%f Y:%f", (*path_it)->x, (*path_it)->y);
+  //Setup topics to Publish from this node
+  map_pub = n.advertise<nav_msgs::OccupancyGrid>("/map_bounded", 2);
+  ros::Publisher velocity_publisher = n.advertise<geometry_msgs::Twist>("/cmd_vel_mux/input/navi", 1);
+  marker_pub = n.advertise<visualization_msgs::Marker>("visualization_marker", 1, true);
+
+  //Velocity control variable
+  geometry_msgs::Twist vel;
+
+  //Set the loop rate
+  ros::Rate loop_rate(20);    //20Hz update rate
+
+
+  first_pose = false;
+  ROS_INFO("Waiting for First Pose and Map");
+  while (ros::ok() && (!first_pose || !first_map)) {
+    loop_rate.sleep(); //Maintain the loop rate
+    ros::spinOnce();   //Check for new messages
+  }
+  ROS_INFO("Got First Pose and Map");
+
+  path out_path;
+  node waypoints[4];
+  waypoints[0].x = pose.x;
+  waypoints[0].y = pose.y;
+#ifdef SIMULATION
+  waypoints[1].x = 4;
+  waypoints[1].y = 0;
+  waypoints[2].x = 8;
+  waypoints[2].y = -4;
+  waypoints[3].x = 8;
+  waypoints[3].y = 0;
+#else
+  waypoints[1].x = 0;
+  waypoints[1].y = 1;
+  waypoints[2].x = 2;
+  waypoints[2].y = 1;
+  waypoints[3].x = 4.5;
+  waypoints[3].y = -2.2;
+#endif
+  ROS_INFO("START PRM");
+  prm(waypoints, 4, out_path);
+  for (node* n : out_path.nodes) {
+    ROS_INFO("X: %f Y: %f", n->x, n->y);
+  }
+  std::vector<node*>::iterator path_it = out_path.nodes.begin();
+  node *prev_node = &pose;
+  while (ros::ok())
+  {
+    loop_rate.sleep(); //Maintain the loop rate
+    ros::spinOnce();   //Check for new messages
+    //Main loop code goes here:
+
+    float v_f = 0.1;
+
+    float ang = steering_angle(prev_node, *path_it, &pose, v_f);
+    vel.linear.x = v_f; // set linear speed
+    vel.angular.z = ang; // set angular speed
+
+    velocity_publisher.publish(vel); // Publish the command velocity
+
+
+    float dist_to_next = DISTANCE_NODES(&pose, *path_it);
+    float path_ang = ANGLE_NODES(prev_node, *path_it);
+    float ang_to_next = ANGLE_NODES(&pose, *path_it);
+    float diff_ang = path_ang - ang_to_next;
+    float dist_to_next_along_path = dist_to_next * cos(diff_ang);
+    if (fabs(dist_to_next_along_path) < DIST_THRESH) {
+      prev_node = *path_it;
+      path_it++;
+      if (path_it == out_path.nodes.end()) {
+        break;
       }
+      ROS_INFO("FROM X:%f Y:%f", prev_node->x, prev_node->y);
+      ROS_INFO("TO X:%f Y:%f", (*path_it)->x, (*path_it)->y);
     }
+  }
 
-    return 0;
+  return 0;
 }
