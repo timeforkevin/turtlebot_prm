@@ -21,12 +21,10 @@
 
 #include "a_star.h"
 
-#define MAP_ORIGIN_X -1
-#define MAP_ORIGIN_Y -5
 #define TAGID 0
-#define K_STEER 1
+#define K_STEER 0.25
 #define K_SOFT 1
-#define DIST_THRESH 0.05
+#define DIST_THRESH 0.075
 #define MAP_WIDTH 100
 #define NUM_POINTS 250
 #define RESOLUTION 0.1
@@ -48,6 +46,7 @@ ros::Publisher map_pub;
 volatile bool first_pose = false;
 volatile bool first_map = false;
 node pose;
+node map_origin;
 std::vector<signed char, std::allocator<signed char> > map_msg_data(MAP_WIDTH*MAP_WIDTH, 0);
 std::vector<node*> nodes_arr; // 3 for the waypoints
 nav_msgs::OccupancyGrid map_msg;
@@ -134,21 +133,20 @@ void generate_nodes() {
     float rand_xmid = (rand_x1 + rand_x2)/2;
     float rand_ymid = (rand_y1 + rand_y2)/2;
 
-    if (POINT_IN_MAP(rand_x1,rand_y1) && 
-        POINT_IN_MAP(rand_xmid,rand_ymid) && 
-        POINT_IN_MAP(rand_x2,rand_y2)) {
+    if (POINT_IN_MAP(rand_x1/RESOLUTION,rand_y1/RESOLUTION) && 
+        POINT_IN_MAP(rand_xmid/RESOLUTION,rand_ymid/RESOLUTION) && 
+        POINT_IN_MAP(rand_x2/RESOLUTION,rand_y2/RESOLUTION)) {
       if (map_msg_data[round(rand_y1/RESOLUTION)*MAP_WIDTH + round(rand_x1/RESOLUTION)] == 100 &&
           map_msg_data[round(rand_ymid/RESOLUTION)*MAP_WIDTH + round(rand_xmid/RESOLUTION)] != 100 &&
           map_msg_data[round(rand_y2/RESOLUTION)*MAP_WIDTH + round(rand_x2/RESOLUTION)] == 100) {
         node *new_node = new node();
-        new_node->x = MAP_ORIGIN_X+rand_xmid;
-        new_node->y = MAP_ORIGIN_Y+rand_ymid;
+        new_node->x = map_origin.x+rand_xmid;
+        new_node->y = map_origin.y+rand_ymid;
         new_node->yaw = 0;
         nodes_arr.push_back(new_node);
         count += 1;
       }
     }
-    
   }
 }
 
@@ -167,8 +165,8 @@ void generate_edges() {
 bool collision_detected(node* node_1, node* node_2) {
     std::vector<int> line_x;
     std::vector<int> line_y;
-    bresenham(round((node_1->x-MAP_ORIGIN_X)/RESOLUTION), round((node_1->y-MAP_ORIGIN_Y)/RESOLUTION),
-              round((node_2->x-MAP_ORIGIN_X)/RESOLUTION), round((node_2->y-MAP_ORIGIN_Y)/RESOLUTION), line_x, line_y);
+    bresenham(round((node_1->x-map_origin.x)/RESOLUTION), round((node_1->y-map_origin.y)/RESOLUTION),
+              round((node_2->x-map_origin.x)/RESOLUTION), round((node_2->y-map_origin.y)/RESOLUTION), line_x, line_y);
     while (!line_x.empty()) {
         int next_x = line_x.back();
         int next_y = line_y.back();
@@ -231,8 +229,8 @@ void publish_graph() {
     milestone_msg.ns = "localization";
     milestone_msg.action = visualization_msgs::Marker::ADD;
     milestone_msg.type = visualization_msgs::Marker::POINTS;
-    milestone_msg.scale.x = 0.2;
-    milestone_msg.scale.y = 0.2;
+    milestone_msg.scale.x = 0.02;
+    milestone_msg.scale.y = 0.02;
     milestone_msg.scale.z = 0.2;
     milestone_msg.color.a = 1.0;
     milestone_msg.color.r = 0.0;
@@ -247,8 +245,8 @@ void publish_graph() {
     edge_msg.ns = "localization";
     edge_msg.action = visualization_msgs::Marker::ADD;
     edge_msg.type = visualization_msgs::Marker::LINE_LIST;
-    edge_msg.scale.x = 0.02;
-    edge_msg.scale.y = 0.02;
+    edge_msg.scale.x = 0.1;
+    edge_msg.scale.y = 0.1;
     edge_msg.scale.z = 0.02;
     edge_msg.color.a = 1.0;
     edge_msg.color.r = 0.0;
@@ -407,6 +405,8 @@ void map_callback(const nav_msgs::OccupancyGrid& msg)
     //This function is called when a new map is received
 
     //you probably want to save the map into a form which is easy to work with
+    map_origin.x = msg.info.origin.position.x;
+    map_origin.y = msg.info.origin.position.y;
     bounding_box(msg, map_msg_data);
     nav_msgs::OccupancyGrid bounded_map_msg = msg;
     bounded_map_msg.data = map_msg_data;
@@ -425,11 +425,11 @@ float steering_angle(node *start, node *end, node *curr_pose, float &v_f) {
   float diff_ang = path_ang - curr_ang;
   float err_d = DISTANCE_NODES(start,curr_pose)*sin(diff_ang);// cross-track error
   float err_h = path_ang - curr_pose->yaw;
-  if (err_h < -M_PI) {
-    err_h += 2*M_PI;
-  } else if(err_h > M_PI) {
-    err_h -= 2*M_PI;
-  }
+  // if (err_h < -M_PI) {
+  //   err_h += 2*M_PI;
+  // } else if(err_h > M_PI) {
+  //   err_h -= 2*M_PI;
+  // }
   v_f /= (1+10*fabs(err_d));
   return err_h + atan(K_STEER*err_d/(K_SOFT + v_f));
 }
