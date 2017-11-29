@@ -259,8 +259,8 @@ void publish_graph() {
     edge_msg.ns = "localization";
     edge_msg.action = visualization_msgs::Marker::ADD;
     edge_msg.type = visualization_msgs::Marker::LINE_LIST;
-    edge_msg.scale.x = 0.1;
-    edge_msg.scale.y = 0.1;
+    edge_msg.scale.x = 0.01;
+    edge_msg.scale.y = 0.01;
     edge_msg.scale.z = 0.02;
     edge_msg.color.a = 1.0;
     edge_msg.color.r = 0.0;
@@ -490,9 +490,11 @@ int main(int argc, char **argv)
 
   //Subscribe to the desired topics and assign callbacks
   ros::Subscriber map_sub = n.subscribe("/map", 1, map_callback);
-  // ros::Subscriber pose_sub = n.subscribe("/pose", 1, pose_callback);
+#ifdef SIMULATION
+  ros::Subscriber pose_sub = n.subscribe("/pose", 1, pose_callback);
+#else
   ros::Subscriber pose_sub = n.subscribe("/indoor_pos", 1, pose_callback);
-
+#endif
   ros::Subscriber sim_pose_sub = n.subscribe("/gazebo/model_states", 1, sim_pose_callback);
 
 
@@ -528,12 +530,12 @@ int main(int argc, char **argv)
   waypoints[3].x = 8;
   waypoints[3].y = 0;
 #else
-  waypoints[1].x = 0;
+  waypoints[1].x = 3;
   waypoints[1].y = 1;
-  waypoints[2].x = 2;
+  waypoints[2].x = 5;
   waypoints[2].y = 1;
-  waypoints[3].x = 4.5;
-  waypoints[3].y = -2.2;
+  waypoints[3].x = 8;
+  waypoints[3].y = 1;
 #endif
   ROS_INFO("START PRM");
   prm(waypoints, 4, out_path);
@@ -548,7 +550,7 @@ int main(int argc, char **argv)
     ros::spinOnce();   //Check for new messages
     //Main loop code goes here:
 
-    float v_f = 0.1;
+    float v_f = 0.17;
 
     float ang = steering_angle(prev_node, *path_it, &pose, v_f);
     vel.linear.x = v_f; // set linear speed
