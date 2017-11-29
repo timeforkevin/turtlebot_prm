@@ -18,6 +18,7 @@
 #include <eigen3/Eigen/Dense>
 #include <random>
 #include <visualization_msgs/Marker.h>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
 
 #include "a_star.h"
 
@@ -350,12 +351,21 @@ void prm(node* waypoints, int num_waypoints, path &out_path) {
 
 //Callback function for the Position topic (LIVE)
 
-void pose_callback(const geometry_msgs::PoseStamped & msg)
+// void pose_callback(const geometry_msgs::PoseStamped & msg)
+// {
+//   //This function is called when a new position message is received
+//   pose.x = msg.pose.position.x; // Robot X psotition
+//   pose.y = msg.pose.position.y; // Robot Y psotition
+//   pose.yaw = tf::getYaw(msg.pose.orientation); // Robot Yaw
+//   first_pose = true;
+// }
+
+void pose_callback(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& msg)
 {
-  //This function is called when a new position message is received
-  pose.x = msg.pose.position.x; // Robot X psotition
-  pose.y = msg.pose.position.y; // Robot Y psotition
-  pose.yaw = tf::getYaw(msg.pose.orientation); // Robot Yaw
+
+  pose.x = msg->pose.pose.position.x; // Robot X psotition
+  pose.y= msg->pose.pose.position.y; // Robot Y psotition
+  pose.yaw = tf::getYaw(msg->pose.pose.orientation); // Robot Yaw
   first_pose = true;
 }
 
@@ -425,11 +435,11 @@ float steering_angle(node *start, node *end, node *curr_pose, float &v_f) {
   float diff_ang = path_ang - curr_ang;
   float err_d = DISTANCE_NODES(start,curr_pose)*sin(diff_ang);// cross-track error
   float err_h = path_ang - curr_pose->yaw;
-  // if (err_h < -M_PI) {
-  //   err_h += 2*M_PI;
-  // } else if(err_h > M_PI) {
-  //   err_h -= 2*M_PI;
-  // }
+  if (err_h < -M_PI) {
+    err_h += 2*M_PI;
+  } else if(err_h > M_PI) {
+    err_h -= 2*M_PI;
+  }
   v_f /= (1+10*fabs(err_d));
   return err_h + atan(K_STEER*err_d/(K_SOFT + v_f));
 }
@@ -443,7 +453,8 @@ int main(int argc, char **argv)
 
     //Subscribe to the desired topics and assign callbacks
     ros::Subscriber map_sub = n.subscribe("/map", 1, map_callback);
-    ros::Subscriber pose_sub = n.subscribe("/pose", 1, pose_callback);
+    // ros::Subscriber pose_sub = n.subscribe("/pose", 1, pose_callback);
+    ros::Subscriber pose_sub = n.subscribe("/indoor_pose", 1, pose_callback);
 
     //Setup topics to Publish from this node
     map_pub = n.advertise<nav_msgs::OccupancyGrid>("/map_bounded", 2);
