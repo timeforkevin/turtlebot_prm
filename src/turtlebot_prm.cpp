@@ -33,6 +33,7 @@
 #define FRAND_TO(X) (static_cast <double> (rand()) / (static_cast <double> (RAND_MAX/(X))))
 
 #define POINT_IN_MAP(X,Y) (X > -1 && X < MAP_WIDTH && Y > -1 && Y < MAP_WIDTH)
+#define POINT_IN_RMAP(X,Y) (X > 0 && X < MAP_WIDTH*RESOLUTION && Y > 0 && Y < MAP_WIDTH*RESOLUTION)
 
 
 typedef Eigen::Matrix<float, 3, 1> Vector3f;
@@ -133,9 +134,9 @@ void generate_nodes() {
     float rand_xmid = (rand_x1 + rand_x2)/2;
     float rand_ymid = (rand_y1 + rand_y2)/2;
 
-    if (POINT_IN_MAP(rand_x1/RESOLUTION,rand_y1/RESOLUTION) && 
-        POINT_IN_MAP(rand_xmid/RESOLUTION,rand_ymid/RESOLUTION) && 
-        POINT_IN_MAP(rand_x2/RESOLUTION,rand_y2/RESOLUTION)) {
+    if (POINT_IN_RMAP(rand_x1/RESOLUTION,rand_y1/RESOLUTION) && 
+        POINT_IN_RMAP(rand_xmid/RESOLUTION,rand_ymid/RESOLUTION) && 
+        POINT_IN_RMAP(rand_x2/RESOLUTION,rand_y2/RESOLUTION)) {
       if (map_msg_data[round(rand_y1/RESOLUTION)*MAP_WIDTH + round(rand_x1/RESOLUTION)] == 100 &&
           map_msg_data[round(rand_ymid/RESOLUTION)*MAP_WIDTH + round(rand_xmid/RESOLUTION)] != 100 &&
           map_msg_data[round(rand_y2/RESOLUTION)*MAP_WIDTH + round(rand_x2/RESOLUTION)] == 100) {
